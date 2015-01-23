@@ -925,6 +925,7 @@ struct drm_bridge {
  * @num_connector: size of the @connectors and @connector_states arrays
  * @connectors: pointer to array of connector pointers
  * @connector_states: pointer to array of connector states pointers
+ * @driver_state: pointer to driver specific global state
  * @acquire_ctx: acquire context for this atomic modeset state update
  */
 struct drm_atomic_state {
@@ -938,6 +939,7 @@ struct drm_atomic_state {
 	int num_connector;
 	struct drm_connector **connectors;
 	struct drm_connector_state **connector_states;
+	void *driver_state;
 
 	struct drm_modeset_acquire_ctx *acquire_ctx;
 };
@@ -977,6 +979,7 @@ struct drm_mode_set {
  * @atomic_check: check whether a given atomic state update is possible
  * @atomic_commit: commit an atomic state update previously verified with
  * 	atomic_check()
+ * @atomic_destroy_driver_state: destroy the given driver state
  *
  * Some global (i.e. not per-CRTC, connector, etc) mode setting functions that
  * involve drivers.
@@ -992,6 +995,8 @@ struct drm_mode_config_funcs {
 	int (*atomic_commit)(struct drm_device *dev,
 			     struct drm_atomic_state *a,
 			     bool async);
+	void (*atomic_destroy_driver_state)(struct drm_device *dev,
+					    void *state);
 };
 
 /**
