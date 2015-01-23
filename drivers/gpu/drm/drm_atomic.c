@@ -161,6 +161,12 @@ void drm_atomic_state_clear(struct drm_atomic_state *state)
 		state->planes[i] = NULL;
 		state->plane_states[i] = NULL;
 	}
+
+	if (config->funcs->atomic_destroy_driver_state && state->driver_state) {
+		config->funcs->atomic_destroy_driver_state(dev,
+							   state->driver_state);
+		state->driver_state = NULL;
+	}
 }
 EXPORT_SYMBOL(drm_atomic_state_clear);
 
