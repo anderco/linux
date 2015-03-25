@@ -3297,8 +3297,7 @@ static bool intel_crtc_has_pending_flip(struct drm_crtc *crtc)
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	bool pending;
 
-	if (i915_reset_in_progress(&dev_priv->gpu_error) ||
-	    intel_crtc->reset_counter != atomic_read(&dev_priv->gpu_error.reset_counter))
+	if (intel_crtc->reset_counter != i915_reset_counter(&dev_priv->gpu_error))
 		return false;
 
 	spin_lock_irq(&dev->event_lock);
@@ -10550,8 +10549,7 @@ static bool page_flip_finished(struct intel_crtc *crtc)
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	if (i915_reset_in_progress(&dev_priv->gpu_error) ||
-	    crtc->reset_counter != atomic_read(&dev_priv->gpu_error.reset_counter))
+	if (crtc->reset_counter != i915_reset_counter(&dev_priv->gpu_error))
 		return true;
 
 	/*
@@ -10981,9 +10979,7 @@ static void intel_mmio_flip_work_func(struct work_struct *work)
 		container_of(work, struct intel_mmio_flip, work);
 
 	if (mmio_flip->req)
-		WARN_ON(__i915_wait_request(mmio_flip->req,
-					    mmio_flip->crtc->reset_counter,
-					    false, NULL,
+		WARN_ON(__i915_wait_request(mmio_flip->req, false, NULL,
 					    &mmio_flip->i915->rps.mmioflips));
 
 	intel_do_mmio_flip(mmio_flip->crtc);

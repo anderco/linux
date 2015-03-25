@@ -2169,7 +2169,6 @@ int intel_ring_idle(struct intel_engine_cs *ring)
 
 	/* Make sure we do not trigger any retires */
 	return __i915_wait_request(req,
-				   atomic_read(&to_i915(ring->dev)->gpu_error.reset_counter),
 				   to_i915(ring->dev)->mm.interruptible,
 				   NULL, NULL);
 }
@@ -2204,13 +2203,7 @@ static int __intel_ring_prepare(struct intel_engine_cs *ring,
 int intel_ring_begin(struct intel_engine_cs *ring,
 		     int num_dwords)
 {
-	struct drm_i915_private *dev_priv = ring->dev->dev_private;
 	int ret;
-
-	ret = i915_gem_check_wedge(&dev_priv->gpu_error,
-				   dev_priv->mm.interruptible);
-	if (ret)
-		return ret;
 
 	ret = __intel_ring_prepare(ring, num_dwords * sizeof(uint32_t));
 	if (ret)
