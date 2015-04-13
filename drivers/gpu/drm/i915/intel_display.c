@@ -83,7 +83,6 @@ static void ironlake_pch_clock_get(struct intel_crtc *crtc,
 				   struct intel_crtc_state *pipe_config);
 
 static int intel_set_mode(struct drm_crtc *crtc, struct drm_display_mode *mode,
-			  int x, int y, struct drm_framebuffer *old_fb,
 			  struct drm_atomic_state *state);
 static int intel_framebuffer_init(struct drm_device *dev,
 				  struct intel_framebuffer *ifb,
@@ -9509,7 +9508,7 @@ retry:
 	if (ret)
 		goto fail;
 
-	if (intel_set_mode(crtc, mode, 0, 0, fb, state)) {
+	if (intel_set_mode(crtc, mode, state)) {
 		DRM_DEBUG_KMS("failed to set mode on load-detect pipe\n");
 		if (old->release_fb)
 			old->release_fb->funcs->destroy(old->release_fb);
@@ -9583,7 +9582,7 @@ void intel_release_load_detect_pipe(struct drm_connector *connector,
 		if (ret)
 			goto fail;
 
-		intel_set_mode(crtc, NULL, 0, 0, NULL, state);
+		intel_set_mode(crtc, NULL, state);
 
 		drm_atomic_state_free(state);
 
@@ -11912,7 +11911,6 @@ static int __intel_set_mode_checks(struct drm_atomic_state *state)
 
 static int __intel_set_mode(struct drm_crtc *modeset_crtc,
 			    struct drm_display_mode *mode,
-			    int x, int y, struct drm_framebuffer *fb,
 			    struct intel_crtc_state *pipe_config)
 {
 	struct drm_device *dev = modeset_crtc->dev;
@@ -12022,12 +12020,11 @@ static int __intel_set_mode(struct drm_crtc *modeset_crtc,
 
 static int intel_set_mode_with_config(struct drm_crtc *crtc,
 				      struct drm_display_mode *mode,
-				      int x, int y, struct drm_framebuffer *fb,
 				      struct intel_crtc_state *pipe_config)
 {
 	int ret;
 
-	ret = __intel_set_mode(crtc, mode, x, y, fb, pipe_config);
+	ret = __intel_set_mode(crtc, mode, pipe_config);
 
 	if (ret == 0)
 		intel_modeset_check_state(crtc->dev);
@@ -12037,7 +12034,6 @@ static int intel_set_mode_with_config(struct drm_crtc *crtc,
 
 static int intel_set_mode(struct drm_crtc *crtc,
 			  struct drm_display_mode *mode,
-			  int x, int y, struct drm_framebuffer *fb,
 			  struct drm_atomic_state *state)
 {
 	struct intel_crtc_state *pipe_config;
@@ -12049,7 +12045,7 @@ static int intel_set_mode(struct drm_crtc *crtc,
 		goto out;
 	}
 
-	ret = intel_set_mode_with_config(crtc, mode, x, y, fb, pipe_config);
+	ret = intel_set_mode_with_config(crtc, mode, pipe_config);
 	if (ret)
 		goto out;
 
@@ -12121,8 +12117,7 @@ void intel_crtc_restore_mode(struct drm_crtc *crtc)
 	intel_modeset_setup_plane_state(state, crtc, &crtc->mode,
 					crtc->primary->fb, crtc->x, crtc->y);
 
-	intel_set_mode(crtc, &crtc->mode, crtc->x, crtc->y, crtc->primary->fb,
-		       state);
+	intel_set_mode(crtc, &crtc->mode, state);
 
 	drm_atomic_state_free(state);
 }
@@ -12528,7 +12523,6 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 
 	if (config->mode_changed) {
 		ret = intel_set_mode_with_config(set->crtc, set->mode,
-						 set->x, set->y, set->fb,
 						 pipe_config);
 	} else if (config->fb_changed) {
 		struct intel_crtc *intel_crtc = to_intel_crtc(set->crtc);
