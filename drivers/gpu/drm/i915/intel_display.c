@@ -9772,10 +9772,8 @@ retry:
  fail:
 	intel_crtc->new_enabled = crtc->state->enable;
 fail_unlock:
-	if (state) {
-		drm_atomic_state_free(state);
-		state = NULL;
-	}
+	drm_atomic_state_free(state);
+	state = NULL;
 
 	if (ret == -EDEADLK) {
 		drm_modeset_backoff(ctx);
@@ -12915,8 +12913,7 @@ fail:
 	}
 
 out_config:
-	if (state)
-		drm_atomic_state_free(state);
+	drm_atomic_state_free(state);
 
 	intel_set_config_free(config);
 	return ret;
