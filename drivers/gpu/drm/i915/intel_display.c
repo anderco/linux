@@ -9880,9 +9880,9 @@ void intel_release_load_detect_pipe(struct drm_connector *connector,
 		if (ret)
 			goto fail;
 
-		intel_set_mode(crtc, state);
-
-		drm_atomic_state_free(state);
+		ret = intel_set_mode(crtc, state);
+		if (ret)
+			goto fail;
 
 		if (old->release_fb) {
 			drm_framebuffer_unregister_private(old->release_fb);
@@ -12337,6 +12337,8 @@ static int __intel_set_mode(struct drm_crtc *modeset_crtc,
 	intel_crtc->config = crtc_state_copy;
 	intel_crtc->base.state = &crtc_state_copy->base;
 
+	drm_atomic_state_free(state);
+
 	return 0;
 }
 
@@ -12382,6 +12384,7 @@ void intel_crtc_restore_mode(struct drm_crtc *crtc)
 	struct intel_connector *connector;
 	struct drm_connector_state *connector_state;
 	struct intel_crtc_state *crtc_state;
+	int ret;
 
 	state = drm_atomic_state_alloc(dev);
 	if (!state) {
@@ -12440,9 +12443,9 @@ void intel_crtc_restore_mode(struct drm_crtc *crtc)
 	intel_modeset_setup_plane_state(state, crtc, &crtc->mode,
 					crtc->primary->fb, crtc->x, crtc->y);
 
-	intel_set_mode(crtc, state);
-
-	drm_atomic_state_free(state);
+	ret = intel_set_mode(crtc, state);
+	if (ret)
+		drm_atomic_state_free(state);
 }
 
 #undef for_each_intel_crtc_masked
@@ -12671,7 +12674,8 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 	}
 
 out:
-	drm_atomic_state_free(state);
+	if (ret)
+		drm_atomic_state_free(state);
 	return ret;
 }
 
