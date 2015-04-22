@@ -82,8 +82,7 @@ static void i9xx_crtc_clock_get(struct intel_crtc *crtc,
 static void ironlake_pch_clock_get(struct intel_crtc *crtc,
 				   struct intel_crtc_state *pipe_config);
 
-static int intel_set_mode(struct drm_crtc *crtc,
-			  struct drm_atomic_state *state);
+static int intel_set_mode(struct drm_atomic_state *state);
 static int intel_framebuffer_init(struct drm_device *dev,
 				  struct intel_framebuffer *ifb,
 				  struct drm_mode_fb_cmd2 *mode_cmd,
@@ -9730,7 +9729,7 @@ retry:
 
 	drm_mode_copy(&crtc_state->base.mode, mode);
 
-	if (intel_set_mode(crtc, state)) {
+	if (intel_set_mode(state)) {
 		DRM_DEBUG_KMS("failed to set mode on load-detect pipe\n");
 		if (old->release_fb)
 			old->release_fb->funcs->destroy(old->release_fb);
@@ -9804,7 +9803,7 @@ void intel_release_load_detect_pipe(struct drm_connector *connector,
 		if (ret)
 			goto fail;
 
-		ret = intel_set_mode(crtc, state);
+		ret = intel_set_mode(state);
 		if (ret)
 			goto fail;
 
@@ -11303,15 +11302,22 @@ clear_intel_crtc_state(struct intel_crtc_state *crtc_state)
 
 static int
 intel_modeset_pipe_config(struct drm_crtc *crtc,
-			  struct drm_atomic_state *state,
-			  struct intel_crtc_state *pipe_config)
+			  struct drm_atomic_state *state)
 {
+	struct drm_crtc_state *crtc_state;
+	struct intel_crtc_state *pipe_config;
 	struct intel_encoder *encoder;
 	struct drm_connector *connector;
 	struct drm_connector_state *connector_state;
 	int base_bpp, ret = -EINVAL;
 	int i;
 	bool retry = true;
+
+	crtc_state = state->crtc_states[drm_crtc_index(crtc)];
+	if (WARN_ON(!crtc_state))
+		return -EINVAL;
+
+	pipe_config = to_intel_crtc_state(crtc_state);
 
 	if (!check_encoder_cloning(state, to_intel_crtc(crtc))) {
 		DRM_DEBUG_KMS("rejecting invalid cloning configuration\n");
@@ -12045,53 +12051,31 @@ static void update_scanline_offset(struct intel_crtc *crtc)
 		crtc->scanline_offset = 1;
 }
 
-static struct intel_crtc_state *
-intel_modeset_compute_config(struct drm_crtc *crtc,
-			     struct drm_atomic_state *state)
+static int
+intel_modeset_compute_config(struct drm_atomic_state *state)
 {
-	struct intel_crtc_state *pipe_config;
-	int ret = 0;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *crtc_state;
+	int ret, i;
 
 	ret = drm_atomic_helper_check_modeset(state->dev, state);
 	if (ret)
-		return ERR_PTR(ret);
+		return ret;
 
-	/*
-	 * Note this needs changes when we start tracking multiple modes
-	 * and crtcs.  At that point we'll need to compute the whole config
-	 * (i.e. one pipe_config for each crtc) rather than just the one
-	 * for this crtc.
-	 */
-	pipe_config = intel_atomic_get_crtc_state(state, to_intel_crtc(crtc));
-	if (IS_ERR(pipe_config))
-		return pipe_config;
+	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		if (!crtc_state->enable)
+			continue;
 
-	if (!pipe_config->base.enable)
-		return pipe_config;
+		ret = intel_modeset_pipe_config(crtc, state);
+		if (ret)
+			return ret;
 
-	ret = intel_modeset_pipe_config(crtc, state, pipe_config);
-	if (ret)
-		return ERR_PTR(ret);
+		intel_dump_pipe_config(to_intel_crtc(crtc),
+				       to_intel_crtc_state(crtc_state),
+				       "[modeset]");
+	}
 
-	/* Check things that can only be changed through modeset */
-	if (pipe_config->has_audio !=
-	    to_intel_crtc(crtc)->config->has_audio)
-		pipe_config->base.mode_changed = true;
-
-	/*
-	 * Note we have an issue here with infoframes: current code
-	 * only updates them on the full mode set path per hw
-	 * requirements.  So here we should be checking for any
-	 * required changes and forcing a mode set.
-	 */
-
-	intel_dump_pipe_config(to_intel_crtc(crtc), pipe_config,"[modeset]");
-
-	ret = drm_atomic_helper_check_planes(state->dev, state);
-	if (ret)
-		return ERR_PTR(ret);
-
-	return pipe_config;
+	return drm_atomic_helper_check_planes(state->dev, state);
 }
 
 static int __intel_set_mode_setup_plls(struct drm_atomic_state *state)
@@ -12231,37 +12215,27 @@ static int __intel_set_mode(struct drm_atomic_state *state)
 	return 0;
 }
 
-static int intel_set_mode_with_config(struct drm_crtc *crtc,
-				      struct intel_crtc_state *pipe_config)
+static int intel_set_mode_checked(struct drm_atomic_state *state)
 {
+	struct drm_device *dev = state->dev;
 	int ret;
 
-	ret = __intel_set_mode(pipe_config->base.state);
-
+	ret = __intel_set_mode(state);
 	if (ret == 0)
-		intel_modeset_check_state(crtc->dev);
+		intel_modeset_check_state(dev);
 
 	return ret;
 }
 
-static int intel_set_mode(struct drm_crtc *crtc,
-			  struct drm_atomic_state *state)
+static int intel_set_mode(struct drm_atomic_state *state)
 {
-	struct intel_crtc_state *pipe_config;
-	int ret = 0;
+	int ret;
 
-	pipe_config = intel_modeset_compute_config(crtc, state);
-	if (IS_ERR(pipe_config)) {
-		ret = PTR_ERR(pipe_config);
-		goto out;
-	}
-
-	ret = intel_set_mode_with_config(crtc, pipe_config);
+	ret = intel_modeset_compute_config(state);
 	if (ret)
-		goto out;
+		return ret;
 
-out:
-	return ret;
+	return intel_set_mode_checked(state);
 }
 
 void intel_crtc_restore_mode(struct drm_crtc *crtc)
@@ -12332,7 +12306,7 @@ void intel_crtc_restore_mode(struct drm_crtc *crtc)
 	intel_modeset_setup_plane_state(state, crtc, &crtc->mode,
 					crtc->primary->fb, crtc->x, crtc->y);
 
-	ret = intel_set_mode(crtc, state);
+	ret = intel_set_mode(state);
 	if (ret)
 		drm_atomic_state_free(state);
 }
@@ -12485,7 +12459,6 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 {
 	struct drm_device *dev;
 	struct drm_atomic_state *state = NULL;
-	struct intel_crtc_state *pipe_config;
 	bool primary_plane_was_visible;
 	int ret;
 
@@ -12517,22 +12490,20 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 	if (ret)
 		goto out;
 
-	pipe_config = intel_modeset_compute_config(set->crtc, state);
-	if (IS_ERR(pipe_config)) {
-		ret = PTR_ERR(pipe_config);
+	ret = intel_modeset_compute_config(state);
+	if (ret)
 		goto out;
-	}
 
 	intel_update_pipe_size(to_intel_crtc(set->crtc));
 
 	primary_plane_was_visible = primary_plane_visible(set->crtc);
 
-	ret = intel_set_mode_with_config(set->crtc, pipe_config);
+	ret = intel_set_mode_checked(state);
 
 	if (ret == 0 &&
-	    pipe_config->base.enable &&
-	    pipe_config->base.planes_changed &&
-	    !needs_modeset(&pipe_config->base)) {
+	    set->crtc->state->enable &&
+	    set->crtc->state->planes_changed &&
+	    !needs_modeset(set->crtc->state)) {
 		struct intel_crtc *intel_crtc = to_intel_crtc(set->crtc);
 
 		/*
