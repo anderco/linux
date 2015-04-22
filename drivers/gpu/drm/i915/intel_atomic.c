@@ -419,7 +419,7 @@ int intel_atomic_setup_scalers(struct drm_device *dev,
 	return 0;
 }
 
-static struct intel_atomic_driver_state *
+struct intel_atomic_driver_state *
 intel_atomic_duplicate_driver_state(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);

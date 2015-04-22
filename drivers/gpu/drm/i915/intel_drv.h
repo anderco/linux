@@ -1390,6 +1390,8 @@ struct drm_crtc_state *intel_crtc_duplicate_state(struct drm_crtc *crtc);
 void intel_crtc_destroy_state(struct drm_crtc *crtc,
 			       struct drm_crtc_state *state);
 struct intel_atomic_driver_state *
+intel_atomic_duplicate_driver_state(struct drm_device *dev);
+struct intel_atomic_driver_state *
 intel_atomic_get_driver_state(struct drm_atomic_state *state);
 void intel_atomic_destroy_driver_state(struct drm_device *dev,
 				       void *driver_state);
