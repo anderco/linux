@@ -11425,6 +11425,19 @@ intel_modeset_update_state(struct drm_atomic_state *state)
 		}
 	}
 
+	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		if (!crtc->state->active || !needs_modeset(crtc->state))
+			continue;
+
+		crtc->mode = crtc->state->mode;
+
+		/*
+		 * Calculate and store various constants which
+		 * are later needed by vblank and swap-completion
+		 * timestamping. They are derived from true hwmode.
+		 */
+		drm_calc_timestamping_constants(crtc, &crtc->state->adjusted_mode);
+	}
 }
 
 static bool intel_fuzzy_clock_check(int clock1, int clock2)
@@ -12211,12 +12224,10 @@ static void __intel_set_mode_cleanup_planes(struct drm_device *dev,
 	drm_atomic_helper_cleanup_planes(dev, old_state);
 }
 
-static int __intel_set_mode(struct drm_crtc *modeset_crtc,
-			    struct intel_crtc_state *pipe_config)
+static int __intel_set_mode(struct drm_atomic_state *state)
 {
-	struct drm_device *dev = modeset_crtc->dev;
+	struct drm_device *dev = state->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_atomic_state *state = pipe_config->base.state;
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *crtc_state;
 	int ret;
@@ -12248,25 +12259,6 @@ static int __intel_set_mode(struct drm_crtc *modeset_crtc,
 
 		if (intel_crtc_to_shared_dpll(intel_crtc))
 			intel_disable_shared_dpll(intel_crtc);
-	}
-
-	/* crtc->mode is already used by the ->mode_set callbacks, hence we need
-	 * to set it here already despite that we pass it down the callchain.
-	 *
-	 * Note we'll need to fix this up when we start tracking multiple
-	 * pipes; here we assume a single modeset_pipe and only track the
-	 * single crtc and mode.
-	 */
-	if (pipe_config->base.active && needs_modeset(&pipe_config->base)) {
-		modeset_crtc->mode = pipe_config->base.mode;
-
-		/*
-		 * Calculate and store various constants which
-		 * are later needed by vblank and swap-completion
-		 * timestamping. They are derived from true hwmode.
-		 */
-		drm_calc_timestamping_constants(modeset_crtc,
-						&pipe_config->base.adjusted_mode);
 	}
 
 	/* Only after disabling all output pipelines that will be changed can we
@@ -12306,7 +12298,7 @@ static int intel_set_mode_with_config(struct drm_crtc *crtc,
 {
 	int ret;
 
-	ret = __intel_set_mode(crtc, pipe_config);
+	ret = __intel_set_mode(pipe_config->base.state);
 
 	if (ret == 0)
 		intel_modeset_check_state(crtc->dev);
