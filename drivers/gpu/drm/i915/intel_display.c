@@ -12051,33 +12051,6 @@ static void update_scanline_offset(struct intel_crtc *crtc)
 		crtc->scanline_offset = 1;
 }
 
-static int
-intel_modeset_compute_config(struct drm_atomic_state *state)
-{
-	struct drm_crtc *crtc;
-	struct drm_crtc_state *crtc_state;
-	int ret, i;
-
-	ret = drm_atomic_helper_check_modeset(state->dev, state);
-	if (ret)
-		return ret;
-
-	for_each_crtc_in_state(state, crtc, crtc_state, i) {
-		if (!crtc_state->enable)
-			continue;
-
-		ret = intel_modeset_pipe_config(crtc, state);
-		if (ret)
-			return ret;
-
-		intel_dump_pipe_config(to_intel_crtc(crtc),
-				       to_intel_crtc_state(crtc_state),
-				       "[modeset]");
-	}
-
-	return drm_atomic_helper_check_planes(state->dev, state);
-}
-
 static int __intel_set_mode_setup_plls(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
@@ -12155,6 +12128,37 @@ static int __intel_set_mode_checks(struct drm_atomic_state *state)
 	return 0;
 }
 
+static int
+intel_modeset_compute_config(struct drm_atomic_state *state)
+{
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *crtc_state;
+	int ret, i;
+
+	ret = drm_atomic_helper_check_modeset(state->dev, state);
+	if (ret)
+		return ret;
+
+	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		if (!crtc_state->enable)
+			continue;
+
+		ret = intel_modeset_pipe_config(crtc, state);
+		if (ret)
+			return ret;
+
+		intel_dump_pipe_config(to_intel_crtc(crtc),
+				       to_intel_crtc_state(crtc_state),
+				       "[modeset]");
+	}
+
+	ret = drm_atomic_helper_check_planes(state->dev, state);
+	if (ret)
+		return ret;
+
+	return __intel_set_mode_checks(state);
+}
+
 static int __intel_set_mode(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
@@ -12163,10 +12167,6 @@ static int __intel_set_mode(struct drm_atomic_state *state)
 	struct drm_crtc_state *crtc_state;
 	int ret = 0;
 	int i;
-
-	ret = __intel_set_mode_checks(state);
-	if (ret < 0)
-		return ret;
 
 	ret = drm_atomic_helper_prepare_planes(dev, state);
 	if (ret)
