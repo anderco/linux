@@ -4148,27 +4148,6 @@ static void lpt_pch_enable(struct drm_crtc *crtc)
 	lpt_enable_pch_transcoder(dev_priv, cpu_transcoder);
 }
 
-void intel_put_shared_dpll(struct intel_crtc *crtc)
-{
-	struct intel_shared_dpll *pll = intel_crtc_to_shared_dpll(crtc);
-
-	if (pll == NULL)
-		return;
-
-	if (!(pll->config.crtc_mask & (1 << crtc->pipe))) {
-		WARN(1, "bad %s crtc mask\n", pll->name);
-		return;
-	}
-
-	pll->config.crtc_mask &= ~(1 << crtc->pipe);
-	if (pll->config.crtc_mask == 0) {
-		WARN_ON(pll->on);
-		WARN_ON(pll->active);
-	}
-
-	crtc->config->shared_dpll = DPLL_ID_PRIVATE;
-}
-
 struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 						struct intel_crtc_state *crtc_state)
 {
@@ -5093,13 +5072,6 @@ static void haswell_crtc_disable(struct drm_crtc *crtc)
 		intel_disable_shared_dpll(intel_crtc);
 }
 
-static void ironlake_crtc_off(struct drm_crtc *crtc)
-{
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	intel_put_shared_dpll(intel_crtc);
-}
-
-
 static void i9xx_pfit_enable(struct intel_crtc *crtc)
 {
 	struct drm_device *dev = crtc->base.dev;
@@ -5927,10 +5899,6 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 	mutex_unlock(&dev->struct_mutex);
 }
 
-static void i9xx_crtc_off(struct drm_crtc *crtc)
-{
-}
-
 /* Master function to enable/disable CRTC and corresponding power wells */
 void intel_crtc_control(struct drm_crtc *crtc, bool enable)
 {
@@ -5991,7 +5959,6 @@ static void intel_crtc_disable(struct drm_crtc *crtc)
 
 	intel_crtc_disable_planes(crtc);
 	dev_priv->display.crtc_disable(crtc);
-	dev_priv->display.off(crtc);
 
 	drm_plane_helper_disable(crtc->primary);
 
@@ -13876,7 +13843,6 @@ static void intel_init_display(struct drm_device *dev)
 			haswell_crtc_compute_clock;
 		dev_priv->display.crtc_enable = haswell_crtc_enable;
 		dev_priv->display.crtc_disable = haswell_crtc_disable;
-		dev_priv->display.off = ironlake_crtc_off;
 		dev_priv->display.update_primary_plane =
 			skylake_update_primary_plane;
 	} else if (HAS_DDI(dev)) {
@@ -13887,7 +13853,6 @@ static void intel_init_display(struct drm_device *dev)
 			haswell_crtc_compute_clock;
 		dev_priv->display.crtc_enable = haswell_crtc_enable;
 		dev_priv->display.crtc_disable = haswell_crtc_disable;
-		dev_priv->display.off = ironlake_crtc_off;
 		dev_priv->display.update_primary_plane =
 			ironlake_update_primary_plane;
 	} else if (HAS_PCH_SPLIT(dev)) {
@@ -13898,7 +13863,6 @@ static void intel_init_display(struct drm_device *dev)
 			ironlake_crtc_compute_clock;
 		dev_priv->display.crtc_enable = ironlake_crtc_enable;
 		dev_priv->display.crtc_disable = ironlake_crtc_disable;
-		dev_priv->display.off = ironlake_crtc_off;
 		dev_priv->display.update_primary_plane =
 			ironlake_update_primary_plane;
 	} else if (IS_VALLEYVIEW(dev)) {
@@ -13908,7 +13872,6 @@ static void intel_init_display(struct drm_device *dev)
 		dev_priv->display.crtc_compute_clock = i9xx_crtc_compute_clock;
 		dev_priv->display.crtc_enable = valleyview_crtc_enable;
 		dev_priv->display.crtc_disable = i9xx_crtc_disable;
-		dev_priv->display.off = i9xx_crtc_off;
 		dev_priv->display.update_primary_plane =
 			i9xx_update_primary_plane;
 	} else {
@@ -13918,7 +13881,6 @@ static void intel_init_display(struct drm_device *dev)
 		dev_priv->display.crtc_compute_clock = i9xx_crtc_compute_clock;
 		dev_priv->display.crtc_enable = i9xx_crtc_enable;
 		dev_priv->display.crtc_disable = i9xx_crtc_disable;
-		dev_priv->display.off = i9xx_crtc_off;
 		dev_priv->display.update_primary_plane =
 			i9xx_update_primary_plane;
 	}
