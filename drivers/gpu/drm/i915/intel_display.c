@@ -11991,39 +11991,6 @@ static int intel_modeset_compute_planes(struct drm_atomic_state *state,
 	return 0;
 }
 
-static int
-intel_modeset_compute_config(struct drm_atomic_state *state)
-{
-	struct drm_crtc *crtc;
-	struct drm_crtc_state *crtc_state;
-	int ret, i;
-
-	ret = drm_atomic_helper_check_modeset(state->dev, state);
-	if (ret)
-		return ret;
-
-	for_each_crtc_in_state(state, crtc, crtc_state, i) {
-		if (needs_modeset(crtc_state)) {
-			ret = intel_modeset_compute_planes(state, crtc);
-			if (ret)
-				return ret;
-		}
-
-		if (!crtc_state->active)
-			continue;
-
-		ret = intel_modeset_pipe_config(crtc, state);
-		if (ret)
-			return ret;
-
-		intel_dump_pipe_config(to_intel_crtc(crtc),
-				       to_intel_crtc_state(crtc_state),
-				       "[modeset]");
-	}
-
-	return drm_atomic_helper_check_planes(state->dev, state);
-}
-
 static int __intel_set_mode_setup_plls(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
@@ -12208,6 +12175,43 @@ static void __intel_set_mode_cleanup_planes(struct drm_device *dev,
 	drm_atomic_helper_cleanup_planes(dev, old_state);
 }
 
+static int
+intel_modeset_compute_config(struct drm_atomic_state *state)
+{
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *crtc_state;
+	int ret, i;
+
+	ret = drm_atomic_helper_check_modeset(state->dev, state);
+	if (ret)
+		return ret;
+
+	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		if (needs_modeset(crtc_state)) {
+			ret = intel_modeset_compute_planes(state, crtc);
+			if (ret)
+				return ret;
+		}
+
+		if (!crtc_state->active)
+			continue;
+
+		ret = intel_modeset_pipe_config(crtc, state);
+		if (ret)
+			return ret;
+
+		intel_dump_pipe_config(to_intel_crtc(crtc),
+				       to_intel_crtc_state(crtc_state),
+				       "[modeset]");
+	}
+
+	ret = drm_atomic_helper_check_planes(state->dev, state);
+	if (ret)
+		return ret;
+
+	return __intel_set_mode_checks(state);
+}
+
 static int __intel_set_mode(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
@@ -12216,10 +12220,6 @@ static int __intel_set_mode(struct drm_atomic_state *state)
 	struct drm_crtc_state *crtc_state;
 	int ret;
 	int i;
-
-	ret = __intel_set_mode_checks(state);
-	if (ret < 0)
-		return ret;
 
 	ret = drm_atomic_helper_prepare_planes(dev, state);
 	if (ret)
