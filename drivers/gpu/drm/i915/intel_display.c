@@ -14592,71 +14592,166 @@ static bool primary_get_hw_state(struct intel_crtc *crtc)
 	return I915_READ(DSPCNTR(crtc->plane)) & DISPLAY_PLANE_ENABLE;
 }
 
-static void intel_modeset_readout_hw_state(struct drm_device *dev)
+static int readout_hw_crtc_state(struct drm_atomic_state *state,
+				 struct intel_crtc *crtc)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	enum pipe pipe;
+	struct drm_i915_private *dev_priv = to_i915(state->dev);
+	struct intel_crtc_state *crtc_state;
+	struct drm_plane *primary = crtc->base.primary;
+	struct drm_plane_state *drm_plane_state;
+	struct intel_plane_state *plane_state;
+
+	crtc_state = intel_atomic_get_crtc_state(state, crtc);
+	if (IS_ERR(crtc_state))
+		return PTR_ERR(crtc_state);
+
+	memset(crtc_state, 0, sizeof(*crtc_state));
+	crtc_state->base.crtc = &crtc->base;
+	crtc_state->base.state = state;
+
+	crtc_state->quirks |= PIPE_CONFIG_QUIRK_INHERITED_MODE;
+
+	crtc->active = dev_priv->display.get_pipe_config(crtc, crtc_state);
+
+	crtc_state->base.enable = crtc->active;
+	crtc_state->base.active = crtc->active;
+	crtc->base.enabled = crtc->active;
+
+	drm_plane_state = drm_atomic_get_plane_state(state, primary);
+	if (IS_ERR(drm_plane_state))
+		return PTR_ERR(drm_plane_state);
+
+	plane_state = to_intel_plane_state(drm_plane_state);
+	plane_state->visible = primary_get_hw_state(crtc);
+
+	DRM_DEBUG_KMS("[CRTC:%d] hw state readout: %s\n",
+		      crtc->base.base.id,
+		      crtc->active ? "enabled" : "disabled");
+
+	return 0;
+}
+
+static int readout_hw_pll_state(struct drm_atomic_state *state)
+{
+	struct drm_i915_private *dev_priv = to_i915(state->dev);
+	struct intel_atomic_driver_state *driver_state;
 	struct intel_crtc *crtc;
-	struct intel_encoder *encoder;
-	struct intel_connector *connector;
+	struct intel_crtc_state *crtc_state;
 	int i;
 
-	for_each_intel_crtc(dev, crtc) {
-		struct drm_plane *primary = crtc->base.primary;
-		struct intel_plane_state *plane_state;
-
-		memset(crtc->config, 0, sizeof(*crtc->config));
-
-		crtc->config->quirks |= PIPE_CONFIG_QUIRK_INHERITED_MODE;
-
-		crtc->active = dev_priv->display.get_pipe_config(crtc,
-								 crtc->config);
-
-		crtc->base.state->enable = crtc->active;
-		crtc->base.state->active = crtc->active;
-		crtc->base.enabled = crtc->active;
-
-		plane_state = to_intel_plane_state(primary->state);
-		plane_state->visible = primary_get_hw_state(crtc);
-
-		DRM_DEBUG_KMS("[CRTC:%d] hw state readout: %s\n",
-			      crtc->base.base.id,
-			      crtc->active ? "enabled" : "disabled");
-	}
+	driver_state = intel_atomic_get_driver_state(state);
+	if (IS_ERR(driver_state))
+		return PTR_ERR(driver_state);
 
 	for (i = 0; i < dev_priv->num_shared_dpll; i++) {
 		struct intel_shared_dpll *pll = &dev_priv->shared_dplls[i];
 
 		pll->on = pll->get_hw_state(dev_priv, pll,
-					    &pll->config.hw_state);
+					    &driver_state->shared_dpll[i].hw_state);
+
 		pll->active = 0;
-		pll->config.crtc_mask = 0;
-		for_each_intel_crtc(dev, crtc) {
-			if (crtc->active && intel_crtc_to_shared_dpll(crtc) == pll) {
+		driver_state->shared_dpll[i].crtc_mask = 0;
+
+		for_each_intel_crtc(state->dev, crtc) {
+			crtc_state = intel_atomic_get_crtc_state(state, crtc);
+			if (IS_ERR(crtc_state))
+				return PTR_ERR(crtc_state);
+
+			if (crtc->active && crtc_state->shared_dpll == i) {
 				pll->active++;
-				pll->config.crtc_mask |= 1 << crtc->pipe;
+				driver_state->shared_dpll[i].crtc_mask |=
+					1 << crtc->pipe;
 			}
 		}
 
 		DRM_DEBUG_KMS("%s hw state readout: crtc_mask 0x%08x, on %i\n",
-			      pll->name, pll->config.crtc_mask, pll->on);
+			      pll->name, driver_state->shared_dpll[i].crtc_mask,
+			      pll->on);
 
-		if (pll->config.crtc_mask)
+		if (driver_state->shared_dpll[i].crtc_mask)
 			intel_display_power_get(dev_priv, POWER_DOMAIN_PLLS);
+	}
+
+	return 0;
+}
+
+static struct drm_connector_state *
+get_connector_state_for_encoder(struct drm_atomic_state *state,
+				struct intel_encoder *encoder)
+{
+	struct drm_connector *connector;
+	struct drm_connector_state *connector_state;
+	int i;
+
+	for_each_connector_in_state(state, connector, connector_state, i)
+		if (connector_state->best_encoder == &encoder->base)
+			return connector_state;
+
+	return NULL;
+}
+
+static int readout_hw_connector_encoder_state(struct drm_atomic_state *state)
+{
+	struct drm_device *dev = state->dev;
+	struct drm_i915_private *dev_priv = to_i915(state->dev);
+	struct intel_crtc *crtc;
+	struct drm_crtc_state *drm_crtc_state;
+	struct intel_crtc_state *crtc_state;
+	struct intel_encoder *encoder;
+	struct intel_connector *connector;
+	struct drm_connector_state *connector_state;
+	enum pipe pipe;
+
+	for_each_intel_connector(dev, connector) {
+		connector_state =
+			drm_atomic_get_connector_state(state, &connector->base);
+		if (IS_ERR(connector_state))
+			return PTR_ERR(connector_state);
+
+		if (connector->get_hw_state(connector)) {
+			connector->base.dpms = DRM_MODE_DPMS_ON;
+			connector->base.encoder = &connector->encoder->base;
+		} else {
+			connector->base.dpms = DRM_MODE_DPMS_OFF;
+			connector->base.encoder = NULL;
+		}
+
+		/* We'll update the crtc field when reading encoder state */
+		connector_state->crtc = NULL;
+
+		connector_state->best_encoder = connector->base.encoder;
+
+		DRM_DEBUG_KMS("[CONNECTOR:%d:%s] hw state readout: %s\n",
+			      connector->base.base.id,
+			      connector->base.name,
+			      connector->base.encoder ? "enabled" : "disabled");
 	}
 
 	for_each_intel_encoder(dev, encoder) {
 		pipe = 0;
 
+		connector_state =
+			get_connector_state_for_encoder(state, encoder);
+
+		encoder->connectors_active = !!connector_state;
+
 		if (encoder->get_hw_state(encoder, &pipe)) {
-			crtc = to_intel_crtc(dev_priv->pipe_to_crtc_mapping[pipe]);
-			encoder->base.crtc = &crtc->base;
-			encoder->get_config(encoder, crtc->config);
+			encoder->base.crtc =
+				dev_priv->pipe_to_crtc_mapping[pipe];
+			crtc = to_intel_crtc(encoder->base.crtc);
+
+			drm_crtc_state =
+				state->crtc_states[drm_crtc_index(&crtc->base)];
+			crtc_state = to_intel_crtc_state(drm_crtc_state);
+
+			encoder->get_config(encoder, crtc_state);
+
+			if (connector_state)
+				connector_state->crtc = &crtc->base;
 		} else {
 			encoder->base.crtc = NULL;
 		}
 
-		encoder->connectors_active = false;
 		DRM_DEBUG_KMS("[ENCODER:%d:%s] hw state readout: %s, pipe %c\n",
 			      encoder->base.base.id,
 			      encoder->base.name,
@@ -14664,20 +14759,42 @@ static void intel_modeset_readout_hw_state(struct drm_device *dev)
 			      pipe_name(pipe));
 	}
 
-	for_each_intel_connector(dev, connector) {
-		if (connector->get_hw_state(connector)) {
-			connector->base.dpms = DRM_MODE_DPMS_ON;
-			connector->encoder->connectors_active = true;
-			connector->base.encoder = &connector->encoder->base;
-		} else {
-			connector->base.dpms = DRM_MODE_DPMS_OFF;
-			connector->base.encoder = NULL;
-		}
-		DRM_DEBUG_KMS("[CONNECTOR:%d:%s] hw state readout: %s\n",
-			      connector->base.base.id,
-			      connector->base.name,
-			      connector->base.encoder ? "enabled" : "disabled");
+	return 0;
+}
+
+static struct drm_atomic_state *
+intel_modeset_readout_hw_state(struct drm_device *dev)
+{
+	struct intel_crtc *crtc;
+	int ret = 0;
+
+	struct drm_atomic_state *state;
+
+	state = drm_atomic_state_alloc(dev);
+	if (!state)
+		return ERR_PTR(-ENOMEM);
+
+	state->acquire_ctx = dev->mode_config.acquire_ctx;
+
+	for_each_intel_crtc(dev, crtc) {
+		ret = readout_hw_crtc_state(state, crtc);
+		if (ret)
+			goto err_free;
 	}
+
+	ret = readout_hw_pll_state(state);
+	if (ret)
+		goto err_free;
+
+	ret = readout_hw_connector_encoder_state(state);
+	if (ret)
+		goto err_free;
+
+	return state;
+
+err_free:
+	drm_atomic_state_free(state);
+	return ERR_PTR(ret);
 }
 
 /* Scan out the current hw modeset state, sanitizes it and maps it into the drm
@@ -14689,9 +14806,25 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 	enum pipe pipe;
 	struct intel_crtc *crtc;
 	struct intel_encoder *encoder;
+	struct drm_atomic_state *state;
+	struct intel_atomic_driver_state *driver_state;
 	int i;
 
-	intel_modeset_readout_hw_state(dev);
+	state = intel_modeset_readout_hw_state(dev);
+	if (IS_ERR(state)) {
+		DRM_ERROR("Failed to read out hw state\n");
+		return;
+	}
+
+	driver_state = intel_atomic_duplicate_driver_state(dev);
+
+	drm_atomic_helper_swap_state(dev, state);
+
+	for_each_intel_crtc(dev, crtc)
+		crtc->config = to_intel_crtc_state(crtc->base.state);
+
+	intel_shared_dpll_commit(state);
+	state->driver_state = driver_state;
 
 	/*
 	 * Now that we have the config, copy it to each CRTC struct
@@ -14740,19 +14873,17 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 		ilk_wm_get_hw_state(dev);
 
 	if (force_restore) {
+		int ret;
+
 		i915_redisable_vga(dev);
 
-		/*
-		 * We need to use raw interfaces for restoring state to avoid
-		 * checking (bogus) intermediate states.
-		 */
-		for_each_pipe(dev_priv, pipe) {
-			struct drm_crtc *crtc =
-				dev_priv->pipe_to_crtc_mapping[pipe];
-
-			intel_crtc_restore_mode(crtc);
+		ret = intel_set_mode(state);
+		if (ret) {
+			DRM_ERROR("Failed to restore previous mode\n");
+			drm_atomic_state_free(state);
 		}
 	} else {
+		drm_atomic_state_free(state);
 		intel_modeset_update_staged_output_state(dev);
 	}
 
