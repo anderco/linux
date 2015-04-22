@@ -11414,6 +11414,18 @@ encoder_retry:
 	DRM_DEBUG_KMS("plane bpp: %i, pipe bpp: %i, dithering: %i\n",
 		      base_bpp, pipe_config->pipe_bpp, pipe_config->dither);
 
+	/* Check if we need to force a modeset */
+	if (pipe_config->has_audio !=
+	    to_intel_crtc(crtc)->config->has_audio)
+		pipe_config->base.mode_changed = true;
+
+	/*
+	 * Note we have an issue here with infoframes: current code
+	 * only updates them on the full mode set path per hw
+	 * requirements.  So here we should be checking for any
+	 * required changes and forcing a mode set.
+	 */
+
 	return 0;
 fail:
 	return ret;
