@@ -11967,10 +11967,6 @@ intel_modeset_compute_config(struct drm_crtc *crtc,
 	struct intel_crtc_state *pipe_config;
 	int ret = 0;
 
-	ret = drm_atomic_add_affected_connectors(state, crtc);
-	if (ret)
-		return ERR_PTR(ret);
-
 	ret = drm_atomic_helper_check_modeset(state->dev, state);
 	if (ret)
 		return ERR_PTR(ret);
