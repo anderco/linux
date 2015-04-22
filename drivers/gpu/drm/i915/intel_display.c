@@ -5212,36 +5212,72 @@ static unsigned long get_crtc_power_domains(struct drm_crtc *crtc)
 	return mask;
 }
 
+static bool
+needs_modeset(struct drm_crtc_state *state)
+{
+	return state->mode_changed || state->active_changed;
+}
+
 static void modeset_update_crtc_power_domains(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	unsigned long pipe_domains[I915_MAX_PIPES] = { 0, };
 	struct intel_crtc *crtc;
+	bool init_power = dev_priv->power_domains.init_power_on;
+	bool any_power = init_power, any_modeset = false;
+	unsigned long domains;
 
 	/*
 	 * First get all needed power domains, then put all unneeded, to avoid
 	 * any unnecessary toggling of the power wells.
 	 */
 	for_each_intel_crtc(dev, crtc) {
+		int idx = drm_crtc_index(&crtc->base);
+		struct drm_crtc_state *crtc_state = state->crtc_states[idx];
 		enum intel_display_power_domain domain;
 
-		if (!crtc->base.state->enable)
+		if (!init_power && !crtc_state)
 			continue;
 
-		pipe_domains[crtc->pipe] = get_crtc_power_domains(&crtc->base);
+		if (needs_modeset(crtc->base.state))
+			any_modeset = true;
 
-		for_each_power_domain(domain, pipe_domains[crtc->pipe])
+		if (crtc->base.state->enable)
+			pipe_domains[crtc->pipe] =
+				get_crtc_power_domains(&crtc->base);
+
+		if (pipe_domains[crtc->pipe] == crtc->enabled_power_domains)
+			continue;
+
+		WARN_ON(!init_power && !needs_modeset(crtc->base.state));
+
+		any_power = true;
+		domains = pipe_domains[crtc->pipe] &
+			  ~crtc->enabled_power_domains;
+
+		for_each_power_domain(domain, domains)
 			intel_display_power_get(dev_priv, domain);
 	}
 
-	if (dev_priv->display.modeset_global_resources)
+	if (any_modeset && dev_priv->display.modeset_global_resources)
 		dev_priv->display.modeset_global_resources(state);
 
+	if (!any_power)
+		return;
+
 	for_each_intel_crtc(dev, crtc) {
+		int idx = drm_crtc_index(&crtc->base);
+		struct drm_crtc_state *crtc_state = state->crtc_states[idx];
 		enum intel_display_power_domain domain;
 
-		for_each_power_domain(domain, crtc->enabled_power_domains)
+		if (!init_power && !crtc_state)
+			continue;
+
+		domains = crtc->enabled_power_domains &
+			  ~pipe_domains[crtc->pipe];
+
+		for_each_power_domain(domain, domains)
 			intel_display_power_put(dev_priv, domain);
 
 		crtc->enabled_power_domains = pipe_domains[crtc->pipe];
@@ -11447,12 +11483,6 @@ static bool intel_crtc_in_use(struct drm_crtc *crtc)
 			return true;
 
 	return false;
-}
-
-static bool
-needs_modeset(struct drm_crtc_state *state)
-{
-	return state->mode_changed || state->active_changed;
 }
 
 static void
