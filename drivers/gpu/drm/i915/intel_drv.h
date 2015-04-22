@@ -244,6 +244,10 @@ typedef struct dpll {
 	int	p;
 } intel_clock_t;
 
+struct intel_atomic_driver_state {
+	struct intel_shared_dpll_config shared_dpll[I915_NUM_PLLS];
+};
+
 struct intel_plane_state {
 	struct drm_plane_state base;
 	struct drm_rect src;
@@ -1385,6 +1389,10 @@ int intel_connector_atomic_get_property(struct drm_connector *connector,
 struct drm_crtc_state *intel_crtc_duplicate_state(struct drm_crtc *crtc);
 void intel_crtc_destroy_state(struct drm_crtc *crtc,
 			       struct drm_crtc_state *state);
+struct intel_atomic_driver_state *
+intel_atomic_get_driver_state(struct drm_atomic_state *state);
+void intel_atomic_destroy_driver_state(struct drm_device *dev,
+				       void *driver_state);
 static inline struct intel_crtc_state *
 intel_atomic_get_crtc_state(struct drm_atomic_state *state,
 			    struct intel_crtc *crtc)

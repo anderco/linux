@@ -418,3 +418,47 @@ int intel_atomic_setup_scalers(struct drm_device *dev,
 
 	return 0;
 }
+
+static struct intel_atomic_driver_state *
+intel_atomic_duplicate_driver_state(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_atomic_driver_state *driver_state;
+	struct intel_shared_dpll *pll;
+	enum intel_dpll_id i;
+
+	driver_state = kzalloc(sizeof *driver_state, GFP_KERNEL);
+
+	/* Copy shared dpll state */
+	for (i = 0; i < dev_priv->num_shared_dpll; i++) {
+		pll = &dev_priv->shared_dplls[i];
+
+		memcpy(&driver_state->shared_dpll[i],
+		       &pll->config, sizeof pll->config);
+	}
+
+	return driver_state;
+}
+
+struct intel_atomic_driver_state *
+intel_atomic_get_driver_state(struct drm_atomic_state *state)
+{
+	struct intel_atomic_driver_state *driver_state;
+
+	if (state->driver_state)
+		return state->driver_state;
+
+	driver_state = intel_atomic_duplicate_driver_state(state->dev);
+	if (!driver_state)
+		return ERR_PTR(-ENOMEM);
+
+	state->driver_state = driver_state;
+
+	return state->driver_state;
+}
+
+void intel_atomic_destroy_driver_state(struct drm_device *dev,
+				       void *driver_state)
+{
+	kfree(driver_state);
+}
