@@ -110,32 +110,40 @@ static int intel_plane_atomic_check(struct drm_plane *plane,
 				    struct drm_plane_state *state)
 {
 	struct drm_crtc *crtc = state->crtc;
-	struct intel_crtc *intel_crtc;
-	struct intel_crtc_state *crtc_state;
+	struct drm_crtc_state *crtc_state;
 	struct intel_plane *intel_plane = to_intel_plane(plane);
 	struct intel_plane_state *intel_state = to_intel_plane_state(state);
 
-	crtc = crtc ? crtc : plane->crtc;
-	intel_crtc = to_intel_crtc(crtc);
-
+	intel_state->visible = false;
 	/*
 	 * Both crtc and plane->crtc could be NULL if we're updating a
 	 * property while the plane is disabled.  We don't actually have
 	 * anything driver-specific we need to test in that case, so
 	 * just return success.
 	 */
-	if (!crtc)
+	if (!crtc) {
+		DRM_DEBUG_ATOMIC("Invisible: no crtc\n");
+		return 0;
+	}
+
+	crtc_state = state->state->crtc_states[drm_crtc_index(crtc)];
+	if (WARN_ON(!crtc_state))
 		return 0;
 
-	/* FIXME: temporary hack necessary while we still use the plane update
-	 * helper. */
-	if (state->state) {
-		crtc_state =
-			intel_atomic_get_crtc_state(state->state, intel_crtc);
-		if (IS_ERR(crtc_state))
-			return PTR_ERR(crtc_state);
-	} else {
-		crtc_state = intel_crtc->config;
+	if (!crtc_state->enable) {
+		DRM_DEBUG_ATOMIC("Invisible: crtc off\n");
+
+		/*
+		 * Probably allowed after converting to atomic. Right
+		 * now it probably means we have the state confused.
+		 */
+		I915_STATE_WARN_ON(plane->type == DRM_PLANE_TYPE_PRIMARY);
+		return 0;
+	}
+
+	if (!crtc_state->active) {
+		DRM_DEBUG_ATOMIC("Invisible: dpms off\n");
+		return 0;
 	}
 
 	/*
@@ -155,24 +163,8 @@ static int intel_plane_atomic_check(struct drm_plane *plane,
 	/* Clip all planes to CRTC size, or 0x0 if CRTC is disabled */
 	intel_state->clip.x1 = 0;
 	intel_state->clip.y1 = 0;
-	intel_state->clip.x2 =
-		crtc_state->base.active ? crtc_state->pipe_src_w : 0;
-	intel_state->clip.y2 =
-		crtc_state->base.active ? crtc_state->pipe_src_h : 0;
-
-	/*
-	 * Disabling a plane is always okay; we just need to update
-	 * fb tracking in a special way since cleanup_fb() won't
-	 * get called by the plane helpers.
-	 */
-	if (state->fb == NULL && plane->state->fb != NULL) {
-		/*
-		 * 'prepare' is never called when plane is being disabled, so
-		 * we need to handle frontbuffer tracking as a special case
-		 */
-		intel_crtc->atomic.disabled_planes |=
-			(1 << drm_plane_index(plane));
-	}
+	intel_state->clip.x2 = to_intel_crtc_state(crtc_state)->pipe_src_w;
+	intel_state->clip.y2 = to_intel_crtc_state(crtc_state)->pipe_src_h;
 
 	if (state->fb && intel_rotation_90_or_270(state->rotation)) {
 		if (!(state->fb->modifier[0] == I915_FORMAT_MOD_Y_TILED ||
