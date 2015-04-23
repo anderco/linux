@@ -4635,10 +4635,6 @@ intel_post_enable_primary(struct drm_crtc *crtc)
 	 */
 	hsw_enable_ips(intel_crtc);
 
-	mutex_lock(&dev->struct_mutex);
-	intel_fbc_update(dev);
-	mutex_unlock(&dev->struct_mutex);
-
 	/*
 	 * Gen2 reports pipe underruns whenever all planes are disabled.
 	 * So don't enable underrun reporting before at least some planes
@@ -4692,11 +4688,6 @@ intel_pre_disable_primary(struct drm_crtc *crtc)
 	 */
 	if (HAS_GMCH_DISPLAY(dev))
 		intel_set_memory_cxsr(dev_priv, false);
-
-	mutex_lock(&dev->struct_mutex);
-	if (dev_priv->fbc.crtc == intel_crtc)
-		intel_fbc_disable(dev);
-	mutex_unlock(&dev->struct_mutex);
 
 	/*
 	 * FIXME IPS should be fine as long as one plane is
@@ -4925,9 +4916,6 @@ static void ironlake_crtc_disable(struct drm_crtc *crtc)
 	int pipe = intel_crtc->pipe;
 	u32 reg, temp;
 
-	if (!intel_crtc->active)
-		return;
-
 	for_each_encoder_on_crtc(dev, crtc, encoder)
 		encoder->disable(encoder);
 
@@ -4965,18 +4953,8 @@ static void ironlake_crtc_disable(struct drm_crtc *crtc)
 			I915_WRITE(PCH_DPLL_SEL, temp);
 		}
 
-		/* disable PCH DPLL */
-		intel_disable_shared_dpll(intel_crtc);
-
 		ironlake_fdi_pll_disable(intel_crtc);
 	}
-
-	intel_crtc->active = false;
-	intel_update_watermarks(crtc);
-
-	mutex_lock(&dev->struct_mutex);
-	intel_fbc_update(dev);
-	mutex_unlock(&dev->struct_mutex);
 }
 
 static void haswell_crtc_disable(struct drm_crtc *crtc)
@@ -4986,9 +4964,6 @@ static void haswell_crtc_disable(struct drm_crtc *crtc)
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	struct intel_encoder *encoder;
 	enum transcoder cpu_transcoder = intel_crtc->config->cpu_transcoder;
-
-	if (!intel_crtc->active)
-		return;
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 		intel_opregion_notify_encoder(encoder, false);
@@ -5025,16 +5000,6 @@ static void haswell_crtc_disable(struct drm_crtc *crtc)
 	for_each_encoder_on_crtc(dev, crtc, encoder)
 		if (encoder->post_disable)
 			encoder->post_disable(encoder);
-
-	intel_crtc->active = false;
-	intel_update_watermarks(crtc);
-
-	mutex_lock(&dev->struct_mutex);
-	intel_fbc_update(dev);
-	mutex_unlock(&dev->struct_mutex);
-
-	if (intel_crtc_to_shared_dpll(intel_crtc))
-		intel_disable_shared_dpll(intel_crtc);
 }
 
 static void i9xx_pfit_enable(struct intel_crtc *crtc)
@@ -5855,9 +5820,6 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 	struct intel_encoder *encoder;
 	int pipe = intel_crtc->pipe;
 
-	if (!intel_crtc->active)
-		return;
-
 	/*
 	 * On gen2 planes are double buffered but the pipe isn't, so we must
 	 * wait for planes to fully turn off before disabling the pipe.
@@ -5891,13 +5853,6 @@ static void i9xx_crtc_disable(struct drm_crtc *crtc)
 
 	if (!IS_GEN2(dev))
 		intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, false);
-
-	intel_crtc->active = false;
-	intel_update_watermarks(crtc);
-
-	mutex_lock(&dev->struct_mutex);
-	intel_fbc_update(dev);
-	mutex_unlock(&dev->struct_mutex);
 }
 
 /* Master function to enable/disable CRTC and corresponding power wells */
@@ -12315,11 +12270,21 @@ static int __intel_set_mode(struct drm_crtc *modeset_crtc,
 	__intel_set_mode_update_planes(dev, state);
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+
 		if (!needs_modeset(crtc_state))
+			continue;
+
+		if (!crtc->state->active)
 			continue;
 
 		intel_crtc_dpms_overlay_disable(to_intel_crtc(crtc));
 		dev_priv->display.crtc_disable(crtc);
+
+		intel_crtc->active = false;
+
+		if (intel_crtc_to_shared_dpll(intel_crtc))
+			intel_disable_shared_dpll(intel_crtc);
 	}
 
 	/* crtc->mode is already used by the ->mode_set callbacks, hence we need
@@ -12352,8 +12317,11 @@ static int __intel_set_mode(struct drm_crtc *modeset_crtc,
 
 	/* Now enable the clocks, plane, pipe, and connectors that we set up. */
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
-		if (!crtc->state->active)
+		if (!crtc->state->active) {
+			if (needs_modeset(crtc->state))
+				intel_update_watermarks(crtc);
 			continue;
+		}
 
 		update_scanline_offset(to_intel_crtc(crtc));
 
@@ -12969,6 +12937,7 @@ static int intel_atomic_check_crtc(struct drm_crtc *crtc,
 
 	memset(&intel_crtc->atomic, 0, sizeof(intel_crtc->atomic));
 	intel_crtc->atomic.update_wm = mode_changed;
+	intel_crtc->atomic.disable_fbc = mode_changed;
 
 	idx = crtc->base.id;
 	I915_STATE_WARN(crtc->state->active != intel_crtc->active,
@@ -13070,6 +13039,9 @@ static int intel_atomic_check_crtc(struct drm_crtc *crtc,
 			break;
 		}
 	}
+
+	if (mode_changed)
+		intel_crtc->atomic.update_wm = false;
 	return 0;
 }
 
@@ -13109,8 +13081,13 @@ static void intel_begin_crtc_commit(struct drm_crtc *crtc)
 	if (intel_crtc->atomic.wait_for_flips)
 		intel_crtc_wait_for_pending_flips(crtc);
 
-	if (intel_crtc->atomic.disable_fbc)
-		intel_fbc_disable(dev);
+	if (intel_crtc->atomic.disable_fbc &&
+	    dev_priv->fbc.crtc == intel_crtc) {
+		mutex_lock(&dev->struct_mutex);
+		if (dev_priv->fbc.crtc == intel_crtc)
+			intel_fbc_disable(dev);
+		mutex_unlock(&dev->struct_mutex);
+	}
 
 	if (intel_crtc->atomic.pre_disable_primary)
 		intel_pre_disable_primary(crtc);
@@ -13148,14 +13125,14 @@ static void intel_finish_crtc_commit(struct drm_crtc *crtc)
 
 	intel_frontbuffer_flip(dev, intel_crtc->atomic.fb_bits);
 
+	if (intel_crtc->atomic.post_enable_primary)
+		intel_post_enable_primary(crtc);
+
 	if (intel_crtc->atomic.update_fbc) {
 		mutex_lock(&dev->struct_mutex);
 		intel_fbc_update(dev);
 		mutex_unlock(&dev->struct_mutex);
 	}
-
-	if (intel_crtc->atomic.post_enable_primary)
-		intel_post_enable_primary(crtc);
 
 	drm_for_each_legacy_plane(p, &dev->mode_config.plane_list)
 		if (intel_crtc->atomic.update_sprite_watermarks & drm_plane_index(p))
