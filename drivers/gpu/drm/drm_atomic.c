@@ -1295,7 +1295,8 @@ EXPORT_SYMBOL(drm_atomic_async_commit);
  */
 
 static struct drm_pending_vblank_event *create_vblank_event(
-		struct drm_device *dev, struct drm_file *file_priv, uint64_t user_data)
+		struct drm_device *dev, struct drm_file *file_priv,
+		uint64_t user_data, struct drm_crtc *crtc)
 {
 	struct drm_pending_vblank_event *e = NULL;
 	unsigned long flags;
@@ -1319,6 +1320,7 @@ static struct drm_pending_vblank_event *create_vblank_event(
 	e->event.base.type = DRM_EVENT_FLIP_COMPLETE;
 	e->event.base.length = sizeof e->event;
 	e->event.user_data = user_data;
+	e->event.crtc_id = crtc->base.id;
 	e->base.event = &e->event.base;
 	e->base.file_priv = file_priv;
 	e->base.destroy = (void (*) (struct drm_pending_event *)) kfree;
@@ -1520,7 +1522,8 @@ retry:
 		for_each_crtc_in_state(state, crtc, crtc_state, i) {
 			struct drm_pending_vblank_event *e;
 
-			e = create_vblank_event(dev, file_priv, arg->user_data);
+			e = create_vblank_event(dev, file_priv, arg->user_data,
+						crtc);
 			if (!e) {
 				ret = -ENOMEM;
 				goto fail;
