@@ -3601,7 +3601,6 @@ intel_dp_set_signal_levels(struct intel_dp *intel_dp, uint32_t *DP)
 
 static bool
 intel_dp_set_link_train(struct intel_dp *intel_dp,
-			uint32_t *DP,
 			uint8_t dp_train_pat)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
@@ -3610,9 +3609,9 @@ intel_dp_set_link_train(struct intel_dp *intel_dp,
 	uint8_t buf[sizeof(intel_dp->train_set) + 1];
 	int ret, len;
 
-	_intel_dp_set_link_train(intel_dp, DP, dp_train_pat);
+	_intel_dp_set_link_train(intel_dp, &intel_dp->DP, dp_train_pat);
 
-	I915_WRITE(intel_dp->output_reg, *DP);
+	I915_WRITE(intel_dp->output_reg, intel_dp->DP);
 	POSTING_READ(intel_dp->output_reg);
 
 	buf[0] = dp_train_pat;
@@ -3633,17 +3632,17 @@ intel_dp_set_link_train(struct intel_dp *intel_dp,
 }
 
 static bool
-intel_dp_reset_link_train(struct intel_dp *intel_dp, uint32_t *DP,
+intel_dp_reset_link_train(struct intel_dp *intel_dp,
 			uint8_t dp_train_pat)
 {
 	if (!intel_dp->train_set_valid)
 		memset(intel_dp->train_set, 0, sizeof(intel_dp->train_set));
-	intel_dp_set_signal_levels(intel_dp, DP);
-	return intel_dp_set_link_train(intel_dp, DP, dp_train_pat);
+	intel_dp_set_signal_levels(intel_dp, &intel_dp->DP);
+	return intel_dp_set_link_train(intel_dp, dp_train_pat);
 }
 
 static bool
-intel_dp_update_link_train(struct intel_dp *intel_dp, uint32_t *DP,
+intel_dp_update_link_train(struct intel_dp *intel_dp,
 			   const uint8_t link_status[DP_LINK_STATUS_SIZE])
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
@@ -3652,9 +3651,9 @@ intel_dp_update_link_train(struct intel_dp *intel_dp, uint32_t *DP,
 	int ret;
 
 	intel_get_adjust_train(intel_dp, link_status);
-	intel_dp_set_signal_levels(intel_dp, DP);
+	intel_dp_set_signal_levels(intel_dp, &intel_dp->DP);
 
-	I915_WRITE(intel_dp->output_reg, *DP);
+	I915_WRITE(intel_dp->output_reg, intel_dp->DP);
 	POSTING_READ(intel_dp->output_reg);
 
 	ret = drm_dp_dpcd_write(&intel_dp->aux, DP_TRAINING_LANE0_SET,
@@ -3695,7 +3694,7 @@ static void intel_dp_set_idle_link_train(struct intel_dp *intel_dp)
 }
 
 /* Enable corresponding port and start training pattern 1 */
-static void
+static bool
 intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 {
 	struct drm_encoder *encoder = &dp_to_dig_port(intel_dp)->base.base;
@@ -3703,9 +3702,9 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 	int i;
 	uint8_t voltage;
 	int voltage_tries, loop_tries;
-	uint32_t DP = intel_dp->DP;
 	uint8_t link_config[2];
 	uint8_t link_bw, rate_select;
+	uint8_t link_status[DP_LINK_STATUS_SIZE];
 
 	if (HAS_DDI(dev))
 		intel_ddi_prepare_link_retrain(encoder);
@@ -3727,22 +3726,20 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 	link_config[1] = DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&intel_dp->aux, DP_DOWNSPREAD_CTRL, link_config, 2);
 
-	DP |= DP_PORT_EN;
+	intel_dp->DP |= DP_PORT_EN;
 
 	/* clock recovery */
-	if (!intel_dp_reset_link_train(intel_dp, &DP,
+	if (!intel_dp_reset_link_train(intel_dp,
 				       DP_TRAINING_PATTERN_1 |
 				       DP_LINK_SCRAMBLING_DISABLE)) {
 		DRM_ERROR("failed to enable link training\n");
-		return;
+		return false;
 	}
 
 	voltage = 0xff;
 	voltage_tries = 0;
 	loop_tries = 0;
 	for (;;) {
-		uint8_t link_status[DP_LINK_STATUS_SIZE];
-
 		drm_dp_link_train_clock_recovery_delay(intel_dp->dpcd);
 		if (!intel_dp_get_link_status(intel_dp, link_status)) {
 			DRM_ERROR("failed to get link status\n");
@@ -3762,11 +3759,11 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 			DRM_DEBUG_KMS("clock recovery not ok, reset");
 			/* clear the flag as we are not reusing train set */
 			intel_dp->train_set_valid = false;
-			if (!intel_dp_reset_link_train(intel_dp, &DP,
+			if (!intel_dp_reset_link_train(intel_dp,
 						       DP_TRAINING_PATTERN_1 |
 						       DP_LINK_SCRAMBLING_DISABLE)) {
 				DRM_ERROR("failed to enable link training\n");
-				return;
+				return false;
 			}
 			continue;
 		}
@@ -3781,7 +3778,7 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 				DRM_ERROR("too many full retries, give up\n");
 				break;
 			}
-			intel_dp_reset_link_train(intel_dp, &DP,
+			intel_dp_reset_link_train(intel_dp,
 						  DP_TRAINING_PATTERN_1 |
 						  DP_LINK_SCRAMBLING_DISABLE);
 			voltage_tries = 0;
@@ -3800,23 +3797,22 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 		voltage = intel_dp->train_set[0] & DP_TRAIN_VOLTAGE_SWING_MASK;
 
 		/* Update training set as requested by target */
-		if (!intel_dp_update_link_train(intel_dp, &DP, link_status)) {
+		if (!intel_dp_update_link_train(intel_dp, link_status)) {
 			DRM_ERROR("failed to update link training\n");
 			break;
 		}
 	}
 
-	intel_dp->DP = DP;
+	return drm_dp_clock_recovery_ok(link_status, intel_dp->lane_count);
 }
 
-static void
+static bool
 intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	struct drm_device *dev = dig_port->base.base.dev;
 	bool channel_eq = false;
 	int tries, cr_tries;
-	uint32_t DP = intel_dp->DP;
 	uint32_t training_pattern = DP_TRAINING_PATTERN_2;
 
 	/*
@@ -3835,11 +3831,11 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 		DRM_ERROR("5.4 Gbps link rate without HBR2/TPS3 support\n");
 
 	/* channel equalization */
-	if (!intel_dp_set_link_train(intel_dp, &DP,
+	if (!intel_dp_set_link_train(intel_dp,
 				     training_pattern |
 				     DP_LINK_SCRAMBLING_DISABLE)) {
 		DRM_ERROR("failed to start channel equalization\n");
-		return;
+		return false;
 	}
 
 	tries = 0;
@@ -3864,7 +3860,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 					      intel_dp->lane_count)) {
 			intel_dp->train_set_valid = false;
 			intel_dp_link_training_clock_recovery(intel_dp);
-			intel_dp_set_link_train(intel_dp, &DP,
+			intel_dp_set_link_train(intel_dp,
 						training_pattern |
 						DP_LINK_SCRAMBLING_DISABLE);
 			cr_tries++;
@@ -3881,7 +3877,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 		if (tries > 5) {
 			intel_dp->train_set_valid = false;
 			intel_dp_link_training_clock_recovery(intel_dp);
-			intel_dp_set_link_train(intel_dp, &DP,
+			intel_dp_set_link_train(intel_dp,
 						training_pattern |
 						DP_LINK_SCRAMBLING_DISABLE);
 			tries = 0;
@@ -3890,7 +3886,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 		}
 
 		/* Update training set as requested by target */
-		if (!intel_dp_update_link_train(intel_dp, &DP, link_status)) {
+		if (!intel_dp_update_link_train(intel_dp, link_status)) {
 			DRM_ERROR("failed to update link training\n");
 			break;
 		}
@@ -3899,25 +3895,29 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 
 	intel_dp_set_idle_link_train(intel_dp);
 
-	intel_dp->DP = DP;
-
 	if (channel_eq) {
 		intel_dp->train_set_valid = true;
 		DRM_DEBUG_KMS("Channel EQ done. DP Training successful\n");
+		return true;
+	} else {
+		return false;
 	}
 }
 
 void intel_dp_stop_link_train(struct intel_dp *intel_dp)
 {
-	intel_dp_set_link_train(intel_dp, &intel_dp->DP,
+	intel_dp_set_link_train(intel_dp,
 				DP_TRAINING_PATTERN_DISABLE);
 }
 
 void
 intel_dp_start_link_train(struct intel_dp *intel_dp)
 {
-	intel_dp_link_training_clock_recovery(intel_dp);
-	intel_dp_link_training_channel_equalization(intel_dp);
+	uint32_t DP = intel_dp->DP;
+
+	if (!intel_dp_link_training_clock_recovery(intel_dp) ||
+	    !intel_dp_link_training_channel_equalization(intel_dp))
+		intel_dp->DP = DP;
 }
 
 static void
