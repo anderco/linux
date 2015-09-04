@@ -3640,7 +3640,7 @@ intel_dp_reset_link_train(struct intel_dp *intel_dp,
 {
 	if (!intel_dp->train_set_valid)
 		memset(intel_dp->train_set, 0, sizeof(intel_dp->train_set));
-	intel_dp_set_signal_levels(intel_dp, &intel_dp->DP);
+	intel_dp_update_signal_levels(intel_dp);
 	return intel_dp_set_link_train(intel_dp, dp_train_pat);
 }
 
