@@ -108,8 +108,6 @@ intel_dp_update_link_train(struct intel_dp *intel_dp)
 static bool
 intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 {
-	struct drm_encoder *encoder = &dp_to_dig_port(intel_dp)->base.base;
-	struct drm_device *dev = encoder->dev;
 	int i;
 	uint8_t voltage;
 	int voltage_tries, loop_tries;
@@ -117,8 +115,8 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 	uint8_t link_bw, rate_select;
 	uint8_t link_status[DP_LINK_STATUS_SIZE];
 
-	if (HAS_DDI(dev))
-		intel_ddi_prepare_link_retrain(encoder);
+	if (intel_dp->prepare_link_retrain)
+		intel_dp->prepare_link_retrain(intel_dp);
 
 	intel_dp_compute_rate(intel_dp, intel_dp->link_rate,
 			      &link_bw, &rate_select);
