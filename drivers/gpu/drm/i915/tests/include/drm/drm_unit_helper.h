@@ -102,4 +102,28 @@ struct delayed_work {
 struct notifier_block {
 };
 
+/* compiler.h stuff */
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
+/**
+ * Returns a pointer to the container of this list element.
+ *
+ * Example:
+ * struct foo* f;
+ * f = container_of(&foo->entry, struct foo, entry);
+ * assert(f == foo);
+ *
+ * @param ptr Pointer to the struct list_head.
+ * @param type Data type of the list element.
+ * @param member Member name of the struct list_head field in the list element.
+ * @return A pointer to the data struct containing the list head.
+ */
+#ifndef container_of
+#define container_of(ptr, type, member) ({ \
+    typeof(((type *)0)->member) *__mptr = (ptr); \
+    (type *)((char *)(__mptr) - (char *) &((type *)0)->member); \
+})
+#endif
+
+
 #endif /* __DRM_UNIT_HELPER_H_ */
