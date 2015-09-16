@@ -118,10 +118,25 @@ sink_device_check_lane_count_and_bw(struct sink_device *sink)
 }
 
 static void
-sink_device_check_pattern_1_set(struct sink_device *sink)
+sink_device_check_initial_levels(struct sink_device *sink)
 {
 	int lane;
 
+	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
+		if (sink_device_get_voltage_swing(sink, lane) != DP_TRAIN_VOLTAGE_SWING_LEVEL_0 ||
+		    sink_device_get_pre_emphasis_level(sink, lane) != DP_TRAIN_PRE_EMPH_LEVEL_0)
+			break;
+	}
+
+	if (lane < sink_device_lane_count(sink))
+		sink->data.started_with_non_zero_levels = true;
+	else
+		sink->data.started_with_non_zero_levels = false;
+}
+
+static void
+sink_device_check_pattern_1_set(struct sink_device *sink)
+{
 	if (!sink->data.lane_count_and_bw_set ||
 	    sink->data.training_pattern_1_set)
 		return;
@@ -138,11 +153,7 @@ sink_device_check_pattern_1_set(struct sink_device *sink)
 		   sink->data.dpcd[DP_LANE_COUNT_SET] == 2 ||
 		   sink->data.dpcd[DP_LANE_COUNT_SET] == 4);
 
-	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
-		if (sink_device_get_voltage_swing(sink, lane) != DP_TRAIN_VOLTAGE_SWING_LEVEL_0 ||
-		    sink_device_get_pre_emphasis_level(sink, lane) != DP_TRAIN_PRE_EMPH_LEVEL_0)
-			sink->data.started_with_non_zero_levels = true;
-	}
+	sink_device_check_initial_levels(sink);
 
 	sink->data.training_pattern_1_set = true;
 }
@@ -431,7 +442,8 @@ static struct test_intel_dp test_dp;
 static void
 do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 	uint8_t max_voltage, uint8_t max_pre_emphasis,
-	uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis)
+	uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis,
+	uint8_t initial_voltage, uint8_t initial_pre_emphasis)
 {
 	int lane;
 
@@ -448,6 +460,21 @@ do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 		sink_max_voltage >> DP_TRAIN_VOLTAGE_SWING_SHIFT;
 	test_dp.sink_max_pre_emphasis =
 		sink_max_pre_emphasis >> DP_TRAIN_PRE_EMPHASIS_SHIFT;
+
+	if (initial_voltage || initial_pre_emphasis) {
+		test_dp.dp.train_set_valid = true;
+
+		for (lane = 0; lane < lanes; lane++) {
+			test_dp.dp.train_set[lane] =
+				initial_voltage | initial_pre_emphasis;
+			if (initial_voltage == max_voltage)
+				test_dp.dp.train_set[lane] |=
+					DP_TRAIN_MAX_SWING_REACHED;
+			if (initial_pre_emphasis == max_pre_emphasis)
+				test_dp.dp.train_set[lane] |=
+					DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
+		}
+	}
 
 	sink_device_reset(sink, lanes, link_bw,
 			  test_dp.sink_max_voltage,
@@ -479,7 +506,8 @@ do_test_with_sink(struct sink_device *sink)
 {
 	do_test(sink, 4, DP_LINK_BW_2_7,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3);
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0);
 }
 
 int test_lanes[] = {
@@ -530,7 +558,9 @@ test_max_voltage_and_pre_emphasis(void)
 			test_max_voltage[voltage],
 			test_max_pre_emphasis[emph],
 			test_max_voltage[sink_voltage],
-			test_max_pre_emphasis[sink_emph]);
+			test_max_pre_emphasis[sink_emph],
+			DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
+			DP_TRAIN_PRE_EMPH_LEVEL_0);
 	}
 }
 
@@ -641,6 +671,60 @@ test_sink_doesnt_request_max_voltage(void)
 	full_retry_sink_device.full_retries = 0;
 	do_test(&full_retry_sink_device.base, 4, DP_LINK_BW_2_7,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0);
+}
+
+
+/* Test that the link training optimization falls back to the normal
+ * procedure if link training fails.
+ */
+struct optimization_fallback_sink_device {
+	struct sink_device base;
+	int fail_count;
+};
+
+static bool
+optimization_fallback_sink_get_link_status(struct sink_device *base,
+					   uint8_t link_status[DP_LINK_STATUS_SIZE])
+{
+	struct optimization_fallback_sink_device *sink =
+		container_of(base, struct optimization_fallback_sink_device, base);
+
+	if (!sink->base.data.cr_done &&
+	    !sink_device_request_higher_voltage_swing(&sink->base)) {
+		if (sink->fail_count == 0) {
+			assert(sink->base.data.started_with_non_zero_levels);
+			sink->base.data.training_pattern_1_set = false;
+			sink->fail_count++;
+		} else {
+			sink_device_mark_cr_done(&sink->base, true);
+		}
+	} else if (!sink->base.data.channel_eq_done &&
+		   !sink_device_request_higher_pre_emphasis(&sink->base)) {
+			assert(!sink->base.data.started_with_non_zero_levels);
+			sink_device_mark_channel_eq_done(&sink->base);
+	}
+
+	memcpy(link_status, sink->base.data.dpcd + DP_LANE0_1_STATUS,
+	       DP_LINK_STATUS_SIZE);
+
+	return true;
+}
+
+struct optimization_fallback_sink_device optimization_fallback_sink_device = {
+	.base.dpcd_write = simple_sink_device_dpcd_write,
+	.base.get_link_status = optimization_fallback_sink_get_link_status,
+};
+
+static void
+test_link_training_optimization_fallback(void)
+{
+	DRM_DEBUG_KMS("\n");
+	optimization_fallback_sink_device.fail_count = 0;
+	do_test(&optimization_fallback_sink_device.base, 4, DP_LINK_BW_2_7,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2);
 }
 
@@ -652,6 +736,7 @@ main(int argc, char *argv[])
 	test_clock_recovery_lost_in_channel_eq();
 	test_full_retry();
 	test_sink_doesnt_request_max_voltage();
+	test_link_training_optimization_fallback();
 
 	return 0;
 }
