@@ -626,7 +626,22 @@ static void
 test_full_retry(void)
 {
 	DRM_DEBUG_KMS("\n");
+	full_retry_sink_device.full_retries = 0;
 	do_test_with_sink(&full_retry_sink_device.base);
+}
+
+
+/* Test a full retry loop when the sink device doesn't support the maximum
+ * levels supported by the source.
+ */
+static void
+test_sink_doesnt_request_max_voltage(void)
+{
+	DRM_DEBUG_KMS("\n");
+	full_retry_sink_device.full_retries = 0;
+	do_test(&full_retry_sink_device.base, 4, DP_LINK_BW_2_7,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2);
 }
 
 
@@ -636,6 +651,7 @@ main(int argc, char *argv[])
 	test_max_voltage_and_pre_emphasis();
 	test_clock_recovery_lost_in_channel_eq();
 	test_full_retry();
+	test_sink_doesnt_request_max_voltage();
 
 	return 0;
 }
