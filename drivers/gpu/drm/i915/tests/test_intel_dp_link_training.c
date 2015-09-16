@@ -71,6 +71,8 @@ struct sink_device {
 		bool channel_eq_done;
 
 		uint8_t dpcd[0x3000];
+		uint8_t max_voltage;
+		uint8_t max_pre_emphasis;
 	} data;
 };
 
@@ -222,18 +224,20 @@ sink_device_set_adjust_pre_emphasis(struct sink_device *sink,
 static bool
 sink_device_request_higher_voltage_swing(struct sink_device *sink)
 {
-	bool max_reached = false;
 	int lane;
 
+	/* Check if the sink limit has been reached */
 	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
-		if (sink_device_max_voltage_reached(sink, lane)) {
-			max_reached = true;
-			break;
-		}
+		if (sink_device_get_voltage_swing(sink, lane) >=
+		    sink->data.max_voltage)
+			return false;
 	}
 
-	if (max_reached)
-		return false;
+	/* Check if the source limit has been reached */
+	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
+		if (sink_device_max_voltage_reached(sink, lane))
+			return false;
+	}
 
 	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
 		uint8_t new_voltage =
@@ -248,18 +252,20 @@ sink_device_request_higher_voltage_swing(struct sink_device *sink)
 static bool
 sink_device_request_higher_pre_emphasis(struct sink_device *sink)
 {
-	bool max_reached = false;
 	int lane;
 
+	/* Check if the sink limit has been reached */
 	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
-		if (sink_device_max_pre_emphasis_reached(sink, lane)) {
-			max_reached = true;
-			break;
-		}
+		if (sink_device_get_pre_emphasis_level(sink, lane) >=
+		    sink->data.max_pre_emphasis)
+			return false;
 	}
 
-	if (max_reached)
-		return false;
+	/* Check if the source limit has been reached */
+	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
+		if (sink_device_max_pre_emphasis_reached(sink, lane))
+			return false;
+	}
 
 	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
 		uint8_t new_pre_emphasis =
@@ -272,15 +278,21 @@ sink_device_request_higher_pre_emphasis(struct sink_device *sink)
 }
 
 static void
-sink_device_mark_cr_done(struct sink_device *sink)
+sink_device_mark_cr_done(struct sink_device *sink, bool done)
 {
 	int lane;
 
-	for (lane = 0; lane < sink_device_lane_count(sink); lane++)
-		sink->data.dpcd[DP_LANE0_1_STATUS + (lane >> 1)] |=
-			DP_LANE_CR_DONE << (4 * (lane & 1));
+	for (lane = 0; lane < sink_device_lane_count(sink); lane++) {
+		int offset = DP_LANE0_1_STATUS + (lane >> 1);
+		uint8_t mask = DP_LANE_CR_DONE << (4 * (lane & 1));
 
-	sink->data.cr_done = true;
+		if (done)
+			sink->data.dpcd[offset] |= mask;
+		else
+			sink->data.dpcd[offset] &= ~mask;
+	}
+
+	sink->data.cr_done = done;
 }
 
 static void
@@ -305,7 +317,7 @@ simple_sink_device_get_link_status(struct sink_device *sink,
 {
 	if (!sink->data.cr_done) {
 		if (!sink_device_request_higher_voltage_swing(sink))
-			sink_device_mark_cr_done(sink);
+			sink_device_mark_cr_done(sink, true);
 	} else if (!sink->data.channel_eq_done) {
 		if (!sink_device_request_higher_pre_emphasis(sink))
 			sink_device_mark_channel_eq_done(sink);
@@ -318,11 +330,15 @@ simple_sink_device_get_link_status(struct sink_device *sink,
 }
 
 static void
-sink_device_reset(struct sink_device *sink, int lanes, uint8_t link_bw)
+sink_device_reset(struct sink_device *sink, int lanes, uint8_t link_bw,
+		  uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis)
 {
 	memset(&sink->data, 0, sizeof sink->data);
 	sink->data.dpcd[DP_MAX_LINK_RATE] = link_bw;
 	sink->data.dpcd[DP_MAX_LANE_COUNT] = lanes;
+
+	sink->data.max_voltage = sink_max_voltage;
+	sink->data.max_pre_emphasis = sink_max_pre_emphasis;
 }
 
 static struct sink_device simple_sink = {
@@ -339,6 +355,9 @@ struct test_intel_dp {
 
 	uint8_t max_voltage;
 	uint8_t max_pre_emphasis;
+
+	uint8_t sink_max_voltage;
+	uint8_t sink_max_pre_emphasis;
 };
 
 static struct test_intel_dp *
@@ -411,7 +430,8 @@ static struct test_intel_dp test_dp;
 
 static void
 do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
-	     uint8_t max_voltage, uint8_t max_pre_emphasis)
+	uint8_t max_voltage, uint8_t max_pre_emphasis,
+	uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis)
 {
 	int lane;
 
@@ -419,12 +439,19 @@ do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 	test_dp.dp.lane_count = lanes;
 	test_dp.link_bw = link_bw;
 	test_dp.sink = sink;
+
 	test_dp.max_voltage =
 		max_voltage >> DP_TRAIN_VOLTAGE_SWING_SHIFT;
 	test_dp.max_pre_emphasis =
 		max_pre_emphasis >> DP_TRAIN_PRE_EMPHASIS_SHIFT;
+	test_dp.sink_max_voltage =
+		sink_max_voltage >> DP_TRAIN_VOLTAGE_SWING_SHIFT;
+	test_dp.sink_max_pre_emphasis =
+		sink_max_pre_emphasis >> DP_TRAIN_PRE_EMPHASIS_SHIFT;
 
-	sink_device_reset(sink, lanes, link_bw);
+	sink_device_reset(sink, lanes, link_bw,
+			  test_dp.sink_max_voltage,
+			  test_dp.sink_max_pre_emphasis);
 
 	intel_dp_start_link_train(&test_dp.dp);
 	intel_dp_stop_link_train(&test_dp.dp);
@@ -435,10 +462,24 @@ do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 	for (lane = 0; lane < test_dp.dp.lane_count; lane++) {
 		uint8_t cur_v = sink_device_get_voltage_swing(sink, lane);
 		uint8_t cur_p = sink_device_get_pre_emphasis_level(sink, lane);
+		uint8_t target_v = min(test_dp.max_voltage,
+				       test_dp.sink_max_voltage);
+		uint8_t target_p = min(test_dp.max_pre_emphasis,
+				       test_dp.sink_max_pre_emphasis);
 
-		assert(cur_v == test_dp.max_voltage);
-		assert(cur_p == test_dp.max_pre_emphasis);
+		assert(cur_v == target_v);
+		assert(cur_p == target_p);
 	}
+}
+
+/* Run a test with the specified sink and maximum values for the other
+ * parameters. */
+static void
+do_test_with_sink(struct sink_device *sink)
+{
+	do_test(sink, 4, DP_LINK_BW_2_7,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3);
 }
 
 int test_lanes[] = {
@@ -467,24 +508,79 @@ uint8_t test_max_pre_emphasis[] = {
 static void
 test_max_voltage_and_pre_emphasis(void)
 {
-	int lane, bw, voltage, emph;
+	int lane, bw, voltage, emph, sink_voltage, sink_emph;
 
 	for (lane = 0; lane < ARRAY_SIZE(test_lanes); lane++)
 	for (bw = 0; bw < ARRAY_SIZE(test_bw); bw++)
 	for (voltage = 0; voltage < ARRAY_SIZE(test_max_voltage); voltage++)
-	for (emph = 0; emph < ARRAY_SIZE(test_max_pre_emphasis); emph++) {
-		DRM_DEBUG_KMS("l%d-bw%d-v%d-pe%d",
-			      test_lanes[lane],
-			      test_bw[bw],
+	for (sink_voltage = 0; sink_voltage <= voltage; sink_voltage++)
+	for (emph = 0; emph < ARRAY_SIZE(test_max_pre_emphasis); emph++)
+	for (sink_emph = 0; sink_emph <= emph; sink_emph++) {
+		DRM_DEBUG_KMS("Testing link training with %d lanes link bw %d\n",
+			      test_lanes[lane], test_bw[bw]);
+		DRM_DEBUG_KMS("Max voltage: 0x%x (source) 0x%x (sink)\n",
 			      test_max_voltage[voltage],
-			      test_max_pre_emphasis[emph]);
+			      test_max_voltage[sink_voltage]);
+		DRM_DEBUG_KMS("Max pre emphais: 0x%x (source) 0x%x (sink)\n",
+			      test_max_pre_emphasis[emph],
+			      test_max_pre_emphasis[sink_emph]);
 		do_test(&simple_sink,
 			test_lanes[lane],
 			test_bw[bw],
 			test_max_voltage[voltage],
-			test_max_pre_emphasis[emph]);
+			test_max_pre_emphasis[emph],
+			test_max_voltage[sink_voltage],
+			test_max_pre_emphasis[sink_emph]);
 	}
 }
+
+/* Test that the driver does additional clock recovery passes from the
+ * channel equalization phase if clock recovery is lost at that point.
+ */
+struct clock_recovery_lost_sink_device {
+	struct sink_device base;
+	int clock_recovery_lost_count;
+};
+
+static bool
+clock_recovery_lost_sink_get_link_status(struct sink_device *base,
+					 uint8_t link_status[DP_LINK_STATUS_SIZE])
+{
+	struct clock_recovery_lost_sink_device *sink =
+		container_of(base, struct clock_recovery_lost_sink_device, base);
+
+	if (!sink->base.data.cr_done) {
+		if (!sink_device_request_higher_voltage_swing(&sink->base))
+			sink_device_mark_cr_done(&sink->base, true);
+	} else if (!sink->base.data.channel_eq_done) {
+		if (!sink_device_request_higher_pre_emphasis(&sink->base)) {
+			if (sink->clock_recovery_lost_count == 4) {
+				sink_device_mark_channel_eq_done(&sink->base);
+			} else {
+				sink->clock_recovery_lost_count++;
+				sink_device_mark_cr_done(&sink->base, false);
+			}
+		}
+	}
+
+	memcpy(link_status, sink->base.data.dpcd + DP_LANE0_1_STATUS,
+	       DP_LINK_STATUS_SIZE);
+
+	return true;
+}
+
+struct clock_recovery_lost_sink_device clock_recovery_lost_sink_device = {
+	.base.dpcd_write = simple_sink_device_dpcd_write,
+	.base.get_link_status = clock_recovery_lost_sink_get_link_status,
+};
+
+static void
+test_clock_recovery_lost_in_channel_eq(void)
+{
+	DRM_DEBUG_KMS("\n");
+	do_test_with_sink(&clock_recovery_lost_sink_device.base);
+}
+
 
 /*
  * Test that the driver does multiple "full retries" of clock recovey, i.e.
@@ -509,7 +605,7 @@ full_retry_sink_get_link_status(struct sink_device *base,
 	if (!sink->base.data.cr_done) {
 		if (!sink_device_request_higher_voltage_swing(&sink->base) &&
 		    sink->full_retries++ == 4)
-			sink_device_mark_cr_done(&sink->base);
+			sink_device_mark_cr_done(&sink->base, true);
 	} else if (!sink->base.data.channel_eq_done) {
 		if (!sink_device_request_higher_pre_emphasis(&sink->base))
 			sink_device_mark_channel_eq_done(&sink->base);
@@ -530,9 +626,7 @@ static void
 test_full_retry(void)
 {
 	DRM_DEBUG_KMS("\n");
-	do_test(&full_retry_sink_device.base, 4, DP_LINK_BW_2_7,
-		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
-		DP_TRAIN_PRE_EMPH_LEVEL_3);
+	do_test_with_sink(&full_retry_sink_device.base);
 }
 
 
@@ -540,6 +634,7 @@ int
 main(int argc, char *argv[])
 {
 	test_max_voltage_and_pre_emphasis();
+	test_clock_recovery_lost_in_channel_eq();
 	test_full_retry();
 
 	return 0;
