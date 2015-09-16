@@ -164,8 +164,8 @@ sink_device_check_pattern_disable(struct sink_device *sink)
 }
 
 static ssize_t
-sink_device_dpcd_write(struct sink_device *sink, unsigned int offset,
-		       void *buffer, size_t size)
+simple_sink_device_dpcd_write(struct sink_device *sink, unsigned int offset,
+			      void *buffer, size_t size)
 {
 	memcpy(sink->data.dpcd + offset, buffer, size);
 
@@ -300,8 +300,8 @@ sink_device_mark_channel_eq_done(struct sink_device *sink)
 }
 
 static bool
-sink_device_get_link_status(struct sink_device *sink,
-			    uint8_t link_status[DP_LINK_STATUS_SIZE])
+simple_sink_device_get_link_status(struct sink_device *sink,
+				   uint8_t link_status[DP_LINK_STATUS_SIZE])
 {
 	if (!sink->data.cr_done) {
 		if (!sink_device_request_higher_voltage_swing(sink))
@@ -326,8 +326,8 @@ sink_device_reset(struct sink_device *sink, int lanes, uint8_t link_bw)
 }
 
 static struct sink_device simple_sink = {
-	.get_link_status = sink_device_get_link_status,
-	.dpcd_write = sink_device_dpcd_write,
+	.get_link_status = simple_sink_device_get_link_status,
+	.dpcd_write = simple_sink_device_dpcd_write,
 };
 
 /* Glue code */
@@ -464,8 +464,8 @@ uint8_t test_max_pre_emphasis[] = {
 	DP_TRAIN_PRE_EMPH_LEVEL_3,
 };
 
-void
-run_test(void)
+static void
+test_max_voltage_and_pre_emphasis(void)
 {
 	int lane, bw, voltage, emph;
 
@@ -486,8 +486,61 @@ run_test(void)
 	}
 }
 
+/*
+ * Test that the driver does multiple "full retries" of clock recovey, i.e.
+ * it starts clock recovery again from the lowest values up to 5 times, in
+ * case the it fails to get clock recovery with the highest voltage swing.
+ *
+ * Note that this is not according to the spec, but it is the how the
+ * driver behaves.
+ */
+struct full_retry_sink_device {
+	struct sink_device base;
+	int full_retries;
+};
+
+static bool
+full_retry_sink_get_link_status(struct sink_device *base,
+				uint8_t link_status[DP_LINK_STATUS_SIZE])
+{
+	struct full_retry_sink_device *sink =
+		container_of(base, struct full_retry_sink_device, base);
+
+	if (!sink->base.data.cr_done) {
+		if (!sink_device_request_higher_voltage_swing(&sink->base) &&
+		    sink->full_retries++ == 4)
+			sink_device_mark_cr_done(&sink->base);
+	} else if (!sink->base.data.channel_eq_done) {
+		if (!sink_device_request_higher_pre_emphasis(&sink->base))
+			sink_device_mark_channel_eq_done(&sink->base);
+	}
+
+	memcpy(link_status, sink->base.data.dpcd + DP_LANE0_1_STATUS,
+	       DP_LINK_STATUS_SIZE);
+
+	return true;
+}
+
+struct full_retry_sink_device full_retry_sink_device = {
+	.base.dpcd_write = simple_sink_device_dpcd_write,
+	.base.get_link_status = full_retry_sink_get_link_status,
+};
+
+static void
+test_full_retry(void)
+{
+	DRM_DEBUG_KMS("\n");
+	do_test(&full_retry_sink_device.base, 4, DP_LINK_BW_2_7,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+		DP_TRAIN_PRE_EMPH_LEVEL_3);
+}
+
+
 int
 main(int argc, char *argv[])
 {
-	run_test();
+	test_max_voltage_and_pre_emphasis();
+	test_full_retry();
+
+	return 0;
 }
