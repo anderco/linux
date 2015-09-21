@@ -73,6 +73,7 @@ struct sink_device {
 		uint8_t dpcd[0x3000];
 		uint8_t max_voltage;
 		uint8_t max_pre_emphasis;
+		bool source_hbr2;
 	} data;
 };
 
@@ -147,7 +148,8 @@ sink_device_check_pattern_1_set(struct sink_device *sink)
 		return;
 
 	assert(sink->data.dpcd[DP_LINK_BW_SET] == DP_LINK_BW_1_62 ||
-	       sink->data.dpcd[DP_LINK_BW_SET] == DP_LINK_BW_2_7);
+	       sink->data.dpcd[DP_LINK_BW_SET] == DP_LINK_BW_2_7 ||
+	       sink->data.dpcd[DP_LINK_BW_SET] == DP_LINK_BW_5_4);
 
 	assert(sink->data.dpcd[DP_LANE_COUNT_SET] == 1 ||
 		   sink->data.dpcd[DP_LANE_COUNT_SET] == 2 ||
@@ -161,10 +163,16 @@ sink_device_check_pattern_1_set(struct sink_device *sink)
 static void
 sink_device_check_pattern_2_set(struct sink_device *sink)
 {
+	uint8_t expected_pattern = DP_TRAINING_PATTERN_2;
+
 	if (!sink->data.cr_done)
 		return;
 
-	assert(sink_device_get_training_pattern(sink) == DP_TRAINING_PATTERN_2);
+	if (sink->data.source_hbr2 &&
+	    (sink->data.dpcd[DP_MAX_LANE_COUNT] & DP_TPS3_SUPPORTED))
+		expected_pattern = DP_TRAINING_PATTERN_3;
+
+	assert(sink_device_get_training_pattern(sink) == expected_pattern);
 }
 
 static void
@@ -342,14 +350,20 @@ simple_sink_device_get_link_status(struct sink_device *sink,
 
 static void
 sink_device_reset(struct sink_device *sink, int lanes, uint8_t link_bw,
-		  uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis)
+		  uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis,
+		  bool source_hbr2, bool sink_hbr2)
 {
 	memset(&sink->data, 0, sizeof sink->data);
-	sink->data.dpcd[DP_MAX_LINK_RATE] = link_bw;
-	sink->data.dpcd[DP_MAX_LANE_COUNT] = lanes;
+
+	sink->data.dpcd[DP_DPCD_REV] = 0x12;
+	sink->data.dpcd[DP_MAX_LINK_RATE] =
+		sink_hbr2 ? DP_LINK_BW_5_4 : link_bw;
+	sink->data.dpcd[DP_MAX_LANE_COUNT] =
+		lanes | (sink_hbr2 ? DP_TPS3_SUPPORTED : 0);
 
 	sink->data.max_voltage = sink_max_voltage;
 	sink->data.max_pre_emphasis = sink_max_pre_emphasis;
+	sink->data.source_hbr2 = source_hbr2;
 }
 
 static struct sink_device simple_sink = {
@@ -369,6 +383,8 @@ struct test_intel_dp {
 
 	uint8_t sink_max_voltage;
 	uint8_t sink_max_pre_emphasis;
+
+	bool hbr2;
 };
 
 static struct test_intel_dp *
@@ -383,7 +399,7 @@ void intel_dp_set_idle_link_train(struct intel_dp *intel_dp)
 
 bool intel_dp_source_supports_hbr2(struct intel_dp *intel_dp)
 {
-	return false;
+	return to_test_intel_dp(intel_dp)->hbr2;
 }
 
 bool
@@ -443,7 +459,8 @@ static void
 do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 	uint8_t max_voltage, uint8_t max_pre_emphasis,
 	uint8_t sink_max_voltage, uint8_t sink_max_pre_emphasis,
-	uint8_t initial_voltage, uint8_t initial_pre_emphasis)
+	uint8_t initial_voltage, uint8_t initial_pre_emphasis,
+	bool source_hbr2, bool sink_hbr2)
 {
 	int lane;
 
@@ -451,6 +468,7 @@ do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 	test_dp.dp.lane_count = lanes;
 	test_dp.link_bw = link_bw;
 	test_dp.sink = sink;
+	test_dp.hbr2 = source_hbr2;
 
 	test_dp.max_voltage =
 		max_voltage >> DP_TRAIN_VOLTAGE_SWING_SHIFT;
@@ -478,7 +496,10 @@ do_test(struct sink_device *sink, int lanes, uint8_t link_bw,
 
 	sink_device_reset(sink, lanes, link_bw,
 			  test_dp.sink_max_voltage,
-			  test_dp.sink_max_pre_emphasis);
+			  test_dp.sink_max_pre_emphasis,
+			  source_hbr2, sink_hbr2);
+
+	memcpy(test_dp.dp.dpcd, sink->data.dpcd, sizeof(test_dp.dp.dpcd));
 
 	intel_dp_start_link_train(&test_dp.dp);
 	intel_dp_stop_link_train(&test_dp.dp);
@@ -507,7 +528,8 @@ do_test_with_sink(struct sink_device *sink)
 	do_test(sink, 4, DP_LINK_BW_2_7,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0);
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0,
+		false, false);
 }
 
 int test_lanes[] = {
@@ -517,6 +539,7 @@ int test_lanes[] = {
 uint8_t test_bw[] = {
 	DP_LINK_BW_1_62,
 	DP_LINK_BW_2_7,
+	DP_LINK_BW_5_4,
 };
 
 uint8_t test_max_voltage[] = {
@@ -537,13 +560,16 @@ static void
 test_max_voltage_and_pre_emphasis(void)
 {
 	int lane, bw, voltage, emph, sink_voltage, sink_emph;
+	int source_hbr2, sink_hbr2;
 
 	for (lane = 0; lane < ARRAY_SIZE(test_lanes); lane++)
 	for (bw = 0; bw < ARRAY_SIZE(test_bw); bw++)
 	for (voltage = 0; voltage < ARRAY_SIZE(test_max_voltage); voltage++)
 	for (sink_voltage = 0; sink_voltage <= voltage; sink_voltage++)
 	for (emph = 0; emph < ARRAY_SIZE(test_max_pre_emphasis); emph++)
-	for (sink_emph = 0; sink_emph <= emph; sink_emph++) {
+	for (sink_emph = 0; sink_emph <= emph; sink_emph++)
+	for (source_hbr2 = 0; source_hbr2 <= 1; source_hbr2++)
+	for (sink_hbr2 = 0; sink_hbr2 <= 1; sink_hbr2++) {
 		DRM_DEBUG_KMS("Testing link training with %d lanes link bw %d\n",
 			      test_lanes[lane], test_bw[bw]);
 		DRM_DEBUG_KMS("Max voltage: 0x%x (source) 0x%x (sink)\n",
@@ -552,6 +578,8 @@ test_max_voltage_and_pre_emphasis(void)
 		DRM_DEBUG_KMS("Max pre emphais: 0x%x (source) 0x%x (sink)\n",
 			      test_max_pre_emphasis[emph],
 			      test_max_pre_emphasis[sink_emph]);
+		DRM_DEBUG_KMS("HBR2: %d (source) %d (sink)\n",
+			      source_hbr2, sink_hbr2);
 		do_test(&simple_sink,
 			test_lanes[lane],
 			test_bw[bw],
@@ -560,7 +588,9 @@ test_max_voltage_and_pre_emphasis(void)
 			test_max_voltage[sink_voltage],
 			test_max_pre_emphasis[sink_emph],
 			DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
-			DP_TRAIN_PRE_EMPH_LEVEL_0);
+			DP_TRAIN_PRE_EMPH_LEVEL_0,
+			source_hbr2,
+			sink_hbr2);
 	}
 }
 
@@ -672,7 +702,8 @@ test_sink_doesnt_request_max_voltage(void)
 	do_test(&full_retry_sink_device.base, 4, DP_LINK_BW_2_7,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0);
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0,
+		false, false);
 }
 
 
@@ -725,7 +756,8 @@ test_link_training_optimization_fallback(void)
 	do_test(&optimization_fallback_sink_device.base, 4, DP_LINK_BW_2_7,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
 		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2);
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2, DP_TRAIN_PRE_EMPH_LEVEL_2,
+		false, false);
 }
 
 
