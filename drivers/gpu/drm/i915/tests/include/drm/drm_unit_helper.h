@@ -18,7 +18,9 @@
 
 #include "../../../../../../../tools/include/linux/compiler.h"
 
+typedef uint64_t u64;
 typedef uint32_t u32;
+typedef uint16_t u16;
 typedef uint8_t u8;
 
 #define __printf(a, b)		__attribute__((format(printf, a, b)))
@@ -87,5 +89,17 @@ static inline const char *dev_name(const struct device *dev)
 {
 	return NULL;
 }
+
+struct drm_device {
+};
+
+struct drm_connector {
+};
+
+struct delayed_work {
+};
+
+struct notifier_block {
+};
 
 #endif /* __DRM_UNIT_HELPER_H_ */

@@ -28,7 +28,7 @@
 #ifndef _I830_BIOS_H_
 #define _I830_BIOS_H_
 
-#include <drm/drmP.h>
+#include <i915_unit_helper.h>
 
 struct vbt_header {
 	u8 signature[20];		/**< Always starts with 'VBT$' */

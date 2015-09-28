@@ -21,7 +21,11 @@
  * IN THE SOFTWARE.
  */
 
-#include "intel_drv.h"
+#include <i915_unit_helper.h>
+
+#include "intel_bios.h"
+#include "intel_dp.h"
+#include "i915_reg.h"
 
 /* Returns true if the voltage swing changed */
 static bool
