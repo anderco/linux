@@ -30,8 +30,7 @@
 #ifndef _I915_DRV_H_
 #define _I915_DRV_H_
 
-#include <uapi/drm/i915_drm.h>
-#include <uapi/drm/drm_fourcc.h>
+#include <i915_unit_helper.h>
 
 #include "i915_reg.h"
 #include "intel_bios.h"
@@ -39,17 +38,6 @@
 #include "intel_lrc.h"
 #include "i915_gem_gtt.h"
 #include "i915_gem_render_state.h"
-#include <linux/io-mapping.h>
-#include <linux/i2c.h>
-#include <linux/i2c-algo-bit.h>
-#include <drm/intel-gtt.h>
-#include <drm/drm_legacy.h> /* for struct drm_dma_handle */
-#include <drm/drm_gem.h>
-#include <linux/backlight.h>
-#include <linux/hashtable.h>
-#include <linux/intel-iommu.h>
-#include <linux/kref.h>
-#include <linux/pm_qos.h>
 #include "intel_guc.h"
 
 /* General customization:
