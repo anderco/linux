@@ -68,6 +68,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_global.h>
 #include <drm/drm_hashtab.h>
+#include <drm/drm_log.h>
 #include <drm/drm_mem_util.h>
 #include <drm/drm_mm.h>
 #include <drm/drm_os_linux.h>
@@ -89,53 +90,6 @@ struct videomode;
 struct reservation_object;
 struct dma_buf_attachment;
 
-/*
- * 4 debug categories are defined:
- *
- * CORE: Used in the generic drm code: drm_ioctl.c, drm_mm.c, drm_memory.c, ...
- *	 This is the category used by the DRM_DEBUG() macro.
- *
- * DRIVER: Used in the vendor specific part of the driver: i915, radeon, ...
- *	   This is the category used by the DRM_DEBUG_DRIVER() macro.
- *
- * KMS: used in the modesetting code.
- *	This is the category used by the DRM_DEBUG_KMS() macro.
- *
- * PRIME: used in the prime code.
- *	  This is the category used by the DRM_DEBUG_PRIME() macro.
- *
- * ATOMIC: used in the atomic code.
- *	  This is the category used by the DRM_DEBUG_ATOMIC() macro.
- *
- * VBL: used for verbose debug message in the vblank code
- *	  This is the category used by the DRM_DEBUG_VBL() macro.
- *
- * Enabling verbose debug messages is done through the drm.debug parameter,
- * each category being enabled by a bit.
- *
- * drm.debug=0x1 will enable CORE messages
- * drm.debug=0x2 will enable DRIVER messages
- * drm.debug=0x3 will enable CORE and DRIVER messages
- * ...
- * drm.debug=0x3f will enable all messages
- *
- * An interesting feature is that it's possible to enable verbose logging at
- * run-time by echoing the debug value in its sysfs node:
- *   # echo 0xf > /sys/module/drm/parameters/debug
- */
-#define DRM_UT_CORE 		0x01
-#define DRM_UT_DRIVER		0x02
-#define DRM_UT_KMS		0x04
-#define DRM_UT_PRIME		0x08
-#define DRM_UT_ATOMIC		0x10
-#define DRM_UT_VBL		0x20
-
-extern __printf(2, 3)
-void drm_ut_debug_printk(const char *function_name,
-			 const char *format, ...);
-extern __printf(1, 2)
-void drm_err(const char *format, ...);
-
 /***********************************************************************/
 /** \name DRM template customization defaults */
 /*@{*/
@@ -153,81 +107,6 @@ void drm_err(const char *format, ...);
 #define DRIVER_RENDER			0x8000
 #define DRIVER_ATOMIC			0x10000
 #define DRIVER_KMS_LEGACY_CONTEXT	0x20000
-
-/***********************************************************************/
-/** \name Macros to make printk easier */
-/*@{*/
-
-/**
- * Error output.
- *
- * \param fmt printf() like format string.
- * \param arg arguments
- */
-#define DRM_ERROR(fmt, ...)				\
-	drm_err(fmt, ##__VA_ARGS__)
-
-/**
- * Rate limited error output.  Like DRM_ERROR() but won't flood the log.
- *
- * \param fmt printf() like format string.
- * \param arg arguments
- */
-#define DRM_ERROR_RATELIMITED(fmt, ...)				\
-({									\
-	static DEFINE_RATELIMIT_STATE(_rs,				\
-				      DEFAULT_RATELIMIT_INTERVAL,	\
-				      DEFAULT_RATELIMIT_BURST);		\
-									\
-	if (__ratelimit(&_rs))						\
-		drm_err(fmt, ##__VA_ARGS__);				\
-})
-
-#define DRM_INFO(fmt, ...)				\
-	printk(KERN_INFO "[" DRM_NAME "] " fmt, ##__VA_ARGS__)
-
-#define DRM_INFO_ONCE(fmt, ...)				\
-	printk_once(KERN_INFO "[" DRM_NAME "] " fmt, ##__VA_ARGS__)
-
-/**
- * Debug output.
- *
- * \param fmt printf() like format string.
- * \param arg arguments
- */
-#define DRM_DEBUG(fmt, args...)						\
-	do {								\
-		if (unlikely(drm_debug & DRM_UT_CORE))			\
-			drm_ut_debug_printk(__func__, fmt, ##args);	\
-	} while (0)
-
-#define DRM_DEBUG_DRIVER(fmt, args...)					\
-	do {								\
-		if (unlikely(drm_debug & DRM_UT_DRIVER))		\
-			drm_ut_debug_printk(__func__, fmt, ##args);	\
-	} while (0)
-#define DRM_DEBUG_KMS(fmt, args...)					\
-	do {								\
-		if (unlikely(drm_debug & DRM_UT_KMS))			\
-			drm_ut_debug_printk(__func__, fmt, ##args);	\
-	} while (0)
-#define DRM_DEBUG_PRIME(fmt, args...)					\
-	do {								\
-		if (unlikely(drm_debug & DRM_UT_PRIME))			\
-			drm_ut_debug_printk(__func__, fmt, ##args);	\
-	} while (0)
-#define DRM_DEBUG_ATOMIC(fmt, args...)					\
-	do {								\
-		if (unlikely(drm_debug & DRM_UT_ATOMIC))		\
-			drm_ut_debug_printk(__func__, fmt, ##args);	\
-	} while (0)
-#define DRM_DEBUG_VBL(fmt, args...)					\
-	do {								\
-		if (unlikely(drm_debug & DRM_UT_VBL))			\
-			drm_ut_debug_printk(__func__, fmt, ##args);	\
-	} while (0)
-
-/*@}*/
 
 /***********************************************************************/
 /** \name Internal types and structures */
@@ -994,7 +873,6 @@ extern void drm_master_put(struct drm_master **master);
 
 extern void drm_put_dev(struct drm_device *dev);
 extern void drm_unplug_dev(struct drm_device *dev);
-extern unsigned int drm_debug;
 extern bool drm_atomic;
 
 				/* Debugfs support */
