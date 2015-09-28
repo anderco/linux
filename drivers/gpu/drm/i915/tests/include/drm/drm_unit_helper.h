@@ -1,0 +1,91 @@
+#ifndef __DRM_UNIT_HELPER_H_
+#define __DRM_UNIT_HELPER_H_
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <limits.h>
+#include <ctype.h>
+
+#include <string.h>
+#include <bsd/string.h>
+
+#include <errno.h>
+
+#include <linux/types.h>
+#include <linux/i2c.h>
+
+#include "../../../../../../../tools/include/linux/compiler.h"
+
+typedef uint32_t u32;
+typedef uint8_t u8;
+
+#define __printf(a, b)		__attribute__((format(printf, a, b)))
+#define __read_mostly
+
+#define EXPORT_SYMBOL(x)
+
+static inline void mdelay(unsigned long t) {}
+static inline void udelay(unsigned long t) {}
+static inline void usleep_range(unsigned long t1, unsigned long t2) {}
+
+struct i2c_adapter;
+
+struct i2c_algorithm {
+	int (*master_xfer)(struct i2c_adapter *, struct i2c_msg *, int);
+	u32 (*functionality)(struct i2c_adapter *);
+};
+
+struct device {
+	void *parent;
+	int of_node;
+};
+
+struct i2c_adapter {
+	struct device dev;
+	const struct i2c_algorithm *algo;
+	char name[48];
+	void *algo_data;
+	void *adapdata;
+	int owner;
+	int retries;
+	unsigned int class;
+};
+
+static inline int
+i2c_add_adapter(struct i2c_adapter *a)
+{
+	return 0;
+}
+
+static inline int
+i2c_del_adapter(struct i2c_adapter *a)
+{
+	return 0;
+}
+
+#define THIS_MODULE 0
+#define I2C_CLASS_DDC		(1<<3)	/* DDC bus on graphics adapters */
+
+
+struct mutex {
+};
+static inline void mutex_lock(struct mutex *lock) {}
+static inline void mutex_unlock(struct mutex *lock) {}
+#define mutex_init(x)
+
+#define module_param_unsafe(...)
+#define MODULE_PARM_DESC(...)
+
+#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
+#define max(a,b) ((a) > (b) ? (a) : (b))
+#define min(a,b) ((a) > (b) ? (b) : (a))
+#define clamp(a,b,c) min(max((a), (b)), (c))
+
+static inline const char *dev_name(const struct device *dev)
+{
+	return NULL;
+}
+
+#endif /* __DRM_UNIT_HELPER_H_ */
