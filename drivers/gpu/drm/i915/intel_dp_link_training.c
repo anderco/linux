@@ -104,16 +104,11 @@ intel_dp_update_link_train(struct intel_dp *intel_dp)
 	return ret == intel_dp->lane_count;
 }
 
-/* Enable corresponding port and start training pattern 1 */
 static bool
-intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
+setup_clock_recovery(struct intel_dp *intel_dp)
 {
-	int i;
-	uint8_t voltage;
-	int voltage_tries, loop_tries;
 	uint8_t link_config[2];
 	uint8_t link_bw, rate_select;
-	uint8_t link_status[DP_LINK_STATUS_SIZE];
 
 	if (intel_dp->prepare_link_retrain)
 		intel_dp->prepare_link_retrain(intel_dp);
@@ -144,6 +139,21 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 		DRM_ERROR("failed to enable link training\n");
 		return false;
 	}
+
+	return true;
+}
+
+/* Enable corresponding port and start training pattern 1 */
+static bool
+intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
+{
+	int i;
+	uint8_t voltage;
+	int voltage_tries, loop_tries;
+	uint8_t link_status[DP_LINK_STATUS_SIZE];
+
+	if (!setup_clock_recovery(intel_dp))
+		return false;
 
 	voltage = 0xff;
 	voltage_tries = 0;
@@ -217,10 +227,8 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 }
 
 static bool
-intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
+setup_channel_equalization(struct intel_dp *intel_dp)
 {
-	bool channel_eq = false;
-	int tries, cr_tries;
 	uint32_t training_pattern = DP_TRAINING_PATTERN_2;
 
 	/*
@@ -246,6 +254,18 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 		return false;
 	}
 
+	return true;
+}
+
+static bool
+intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
+{
+	bool channel_eq = false;
+	int tries, cr_tries;
+
+	if (!setup_channel_equalization(intel_dp))
+		return false;
+
 	tries = 0;
 	cr_tries = 0;
 	channel_eq = false;
@@ -268,9 +288,8 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 					      intel_dp->lane_count)) {
 			intel_dp->train_set_valid = false;
 			intel_dp_link_training_clock_recovery(intel_dp);
-			intel_dp_set_link_train(intel_dp,
-						training_pattern |
-						DP_LINK_SCRAMBLING_DISABLE);
+			if (!setup_channel_equalization(intel_dp))
+				return false;
 			cr_tries++;
 			continue;
 		}
@@ -285,9 +304,8 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 		if (tries > 5) {
 			intel_dp->train_set_valid = false;
 			intel_dp_link_training_clock_recovery(intel_dp);
-			intel_dp_set_link_train(intel_dp,
-						training_pattern |
-						DP_LINK_SCRAMBLING_DISABLE);
+			if (!setup_channel_equalization(intel_dp))
+				return false;
 			tries = 0;
 			cr_tries++;
 			continue;
