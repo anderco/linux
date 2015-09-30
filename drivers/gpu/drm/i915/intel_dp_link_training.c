@@ -155,6 +155,12 @@ max_voltage_reached_on_all_lanes(struct intel_dp *intel_dp)
 	return true;
 }
 
+static uint8_t
+intel_dp_get_train_voltage(struct intel_dp *intel_dp)
+{
+	return intel_dp->train_set[0] & DP_TRAIN_VOLTAGE_SWING_MASK;
+}
+
 /* Enable corresponding port and start training pattern 1 */
 static void
 intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
@@ -214,7 +220,7 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 		}
 
 		/* Check to see if we've tried the same voltage 5 times */
-		if ((intel_dp->train_set[0] & DP_TRAIN_VOLTAGE_SWING_MASK) == voltage) {
+		if (intel_dp_get_train_voltage(intel_dp) == voltage) {
 			++voltage_tries;
 			if (voltage_tries == 5) {
 				DRM_ERROR("too many voltage retries, give up\n");
@@ -222,7 +228,7 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 			}
 		} else
 			voltage_tries = 0;
-		voltage = intel_dp->train_set[0] & DP_TRAIN_VOLTAGE_SWING_MASK;
+		voltage = intel_dp_get_train_voltage(intel_dp);
 
 		/* Update training set as requested by target */
 		intel_get_adjust_train(intel_dp, link_status);
