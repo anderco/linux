@@ -187,14 +187,13 @@ clock_recovery_voltage_step(struct intel_dp *intel_dp)
 			break;
 
 		/* Check to see if we've tried the same voltage 5 times */
-		if (intel_dp_get_train_voltage(intel_dp) == voltage) {
-			++voltage_tries;
-			if (voltage_tries == 5) {
-				DRM_ERROR("too many voltage retries, give up\n");
-				break;
-			}
-		} else
+		if (intel_dp_get_train_voltage(intel_dp) != voltage) {
 			voltage_tries = 0;
+		} else if (++voltage_tries == 5) {
+			DRM_ERROR("too many voltage retries, give up\n");
+			break;
+		}
+
 		voltage = intel_dp_get_train_voltage(intel_dp);
 
 		/* Update training set as requested by target */
