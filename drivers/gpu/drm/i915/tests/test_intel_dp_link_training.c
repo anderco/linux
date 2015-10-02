@@ -761,6 +761,74 @@ test_link_training_optimization_fallback(void)
 }
 
 
+struct retry_voltage_sink_device {
+	struct sink_device base;
+	int lane_set_write_count;
+};
+
+static ssize_t
+retry_voltage_sink_device_dpcd_write(struct sink_device *base,
+				     unsigned int offset,
+				     void *buffer, size_t size)
+{
+	struct retry_voltage_sink_device *sink =
+		container_of(base, struct retry_voltage_sink_device, base);
+
+	if (offset <= DP_TRAINING_LANE0_SET &&
+	    DP_TRAINING_LANE0_SET <= offset + size)
+		sink->lane_set_write_count++;
+
+	return simple_sink_device_dpcd_write(base, offset, buffer, size);
+}
+
+static bool
+retry_voltage_sink_get_link_status(struct sink_device *base,
+				   uint8_t link_status[DP_LINK_STATUS_SIZE])
+{
+	struct retry_voltage_sink_device *sink =
+		container_of(base, struct retry_voltage_sink_device, base);
+
+	if (!sink->base.data.cr_done) {
+		if (sink->lane_set_write_count == 5) {
+			if (sink_device_request_higher_voltage_swing(base))
+				sink->lane_set_write_count = 0;
+			else
+				sink_device_mark_cr_done(base, true);
+		}
+	} else if (!sink->base.data.channel_eq_done) {
+		if (!sink_device_request_higher_pre_emphasis(base))
+			sink_device_mark_channel_eq_done(base);
+	}
+
+	memcpy(link_status, sink->base.data.dpcd + DP_LANE0_1_STATUS,
+	       DP_LINK_STATUS_SIZE);
+
+	return true;
+}
+
+struct retry_voltage_sink_device retry_voltage_sink_device = {
+	.base.dpcd_write = retry_voltage_sink_device_dpcd_write,
+	.base.get_link_status = retry_voltage_sink_get_link_status,
+};
+
+static void
+test_voltage_retry(void)
+{
+	int lanes;
+
+	for (lanes = 1; lanes <= 4; lanes = lanes << 1) {
+		DRM_DEBUG_KMS("lanes: %d\n", lanes);
+
+		retry_voltage_sink_device.lane_set_write_count = 0;
+		do_test(&retry_voltage_sink_device.base, lanes, DP_LINK_BW_2_7,
+			DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+			DP_TRAIN_VOLTAGE_SWING_LEVEL_3, DP_TRAIN_PRE_EMPH_LEVEL_3,
+			DP_TRAIN_VOLTAGE_SWING_LEVEL_0, DP_TRAIN_PRE_EMPH_LEVEL_0,
+			false, false);
+	}
+}
+
+
 int
 main(int argc, char *argv[])
 {
@@ -769,6 +837,7 @@ main(int argc, char *argv[])
 	test_full_retry();
 	test_sink_doesnt_request_max_voltage();
 	test_link_training_optimization_fallback();
+	test_voltage_retry();
 
 	return 0;
 }
