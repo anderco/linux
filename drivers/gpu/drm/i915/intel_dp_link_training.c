@@ -23,7 +23,8 @@
 
 #include "intel_drv.h"
 
-static void
+/* Returns true if the voltage swing changed */
+static bool
 intel_get_adjust_train(struct intel_dp *intel_dp,
 		       const uint8_t link_status[DP_LINK_STATUS_SIZE])
 {
@@ -32,6 +33,8 @@ intel_get_adjust_train(struct intel_dp *intel_dp,
 	int lane;
 	uint8_t voltage_max;
 	uint8_t preemph_max;
+	uint8_t mask;
+	bool voltage_changed = false;
 
 	for (lane = 0; lane < intel_dp->lane_count; lane++) {
 		uint8_t this_v = drm_dp_get_adjust_request_voltage(link_status, lane);
@@ -51,8 +54,16 @@ intel_get_adjust_train(struct intel_dp *intel_dp,
 	if (p >= preemph_max)
 		p = preemph_max | DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
 
-	for (lane = 0; lane < 4; lane++)
+	mask = DP_TRAIN_VOLTAGE_SWING_MASK | DP_TRAIN_MAX_SWING_REACHED;
+
+	for (lane = 0; lane < 4; lane++) {
+		if ((intel_dp->train_set[lane] & mask) != v)
+			voltage_changed = true;
+
 		intel_dp->train_set[lane] = v | p;
+	}
+
+	return voltage_changed;
 }
 
 static bool
@@ -147,17 +158,10 @@ max_voltage_reached_on_all_lanes(struct intel_dp *intel_dp)
 	return true;
 }
 
-static uint8_t
-intel_dp_get_train_voltage(struct intel_dp *intel_dp)
-{
-	return intel_dp->train_set[0] & DP_TRAIN_VOLTAGE_SWING_MASK;
-}
-
 static bool
 clock_recovery_voltage_step(struct intel_dp *intel_dp)
 {
 	int voltage_tries = 0;
-	uint8_t voltage = 0xff;
 
 	for (;;) {
 		uint8_t link_status[DP_LINK_STATUS_SIZE];
@@ -186,18 +190,16 @@ clock_recovery_voltage_step(struct intel_dp *intel_dp)
 		if (max_voltage_reached_on_all_lanes(intel_dp))
 			break;
 
-		/* Check to see if we've tried the same voltage 5 times */
-		if (intel_dp_get_train_voltage(intel_dp) != voltage) {
+		/* Update training set and check to see if we've tried the same
+		 *  voltage 5 times */
+		if (intel_get_adjust_train(intel_dp, link_status)) {
 			voltage_tries = 0;
 		} else if (++voltage_tries == 5) {
 			DRM_ERROR("too many voltage retries, give up\n");
 			break;
 		}
 
-		voltage = intel_dp_get_train_voltage(intel_dp);
-
-		/* Update training set as requested by target */
-		intel_get_adjust_train(intel_dp, link_status);
+		/* Make the new training set effective */
 		if (!intel_dp_update_link_train(intel_dp)) {
 			DRM_ERROR("failed to update link training\n");
 			break;
