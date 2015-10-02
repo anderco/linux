@@ -180,7 +180,7 @@ clock_recovery_voltage_step(struct intel_dp *intel_dp)
 		 * and we don't get clock recovery, reset link training values
 		 */
 		if (intel_dp->train_set_valid) {
-			DRM_DEBUG_KMS("clock recovery not ok, reset");
+			DRM_DEBUG_KMS("clock recovery not ok, reset\n");
 			/* clear the flag as we are not reusing train set */
 			intel_dp->train_set_valid = false;
 			break;
