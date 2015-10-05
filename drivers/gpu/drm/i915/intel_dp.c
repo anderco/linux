@@ -3066,20 +3066,17 @@ intel_dp_voltage_max(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	enum port port = dp_to_dig_port(intel_dp)->port;
 
-	if (IS_BROXTON(dev))
+	if (IS_BROXTON(dev) || IS_VALLEYVIEW(dev))
 		return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-	else if (INTEL_INFO(dev)->gen >= 9) {
-		if (dev_priv->edp_low_vswing && port == PORT_A)
-			return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
-	} else if (IS_VALLEYVIEW(dev))
+
+	if (INTEL_INFO(dev)->gen >= 9 &&
+	    dev_priv->edp_low_vswing && port == PORT_A)
 		return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-	else if (IS_GEN7(dev) && port == PORT_A)
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
-	else if (HAS_PCH_CPT(dev) && port != PORT_A)
+
+	if (HAS_PCH_CPT(dev) && port != PORT_A)
 		return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-	else
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
+
+	return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
 }
 
 uint8_t
