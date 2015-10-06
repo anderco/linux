@@ -938,6 +938,13 @@ dp_to_dig_port(struct intel_dp *intel_dp)
 	return container_of(intel_dp, struct intel_digital_port, dp);
 }
 
+static inline struct drm_device *intel_dp_to_dev(struct intel_dp *intel_dp)
+{
+	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
+
+	return intel_dig_port->base.base.dev;
+}
+
 static inline struct intel_digital_port *
 hdmi_to_dig_port(struct intel_hdmi *intel_hdmi)
 {
