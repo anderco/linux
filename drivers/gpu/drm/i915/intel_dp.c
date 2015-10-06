@@ -3521,13 +3521,13 @@ gen7_edp_signal_levels(uint8_t train_set)
 	}
 }
 
-/* Properly updates "DP" with the correct signal levels. */
-static void
-intel_dp_set_signal_levels(struct intel_dp *intel_dp, uint32_t *DP)
+void
+intel_dp_update_signal_levels(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	enum port port = intel_dig_port->port;
 	struct drm_device *dev = intel_dig_port->base.base.dev;
+	struct drm_i915_private *dev_priv = to_i915(dev);
 	uint32_t signal_levels, mask = 0;
 	uint8_t train_set = intel_dp->train_set[0];
 
@@ -3562,7 +3562,11 @@ intel_dp_set_signal_levels(struct intel_dp *intel_dp, uint32_t *DP)
 		(train_set & DP_TRAIN_PRE_EMPHASIS_MASK) >>
 			DP_TRAIN_PRE_EMPHASIS_SHIFT);
 
-	*DP = (*DP & ~mask) | signal_levels;
+	intel_dp->DP &= ~mask;
+	intel_dp->DP |= signal_levels;
+
+	I915_WRITE(intel_dp->output_reg, intel_dp->DP);
+	POSTING_READ(intel_dp->output_reg);
 }
 
 void
@@ -3574,19 +3578,6 @@ intel_dp_program_link_training_pattern(struct intel_dp *intel_dp,
 		to_i915(intel_dig_port->base.base.dev);
 
 	_intel_dp_set_link_train(intel_dp, &intel_dp->DP, dp_train_pat);
-
-	I915_WRITE(intel_dp->output_reg, intel_dp->DP);
-	POSTING_READ(intel_dp->output_reg);
-}
-
-void
-intel_dp_update_signal_levels(struct intel_dp *intel_dp)
-{
-	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
-	struct drm_i915_private *dev_priv =
-		to_i915(intel_dig_port->base.base.dev);
-
-	intel_dp_set_signal_levels(intel_dp, &intel_dp->DP);
 
 	I915_WRITE(intel_dp->output_reg, intel_dp->DP);
 	POSTING_READ(intel_dp->output_reg);
