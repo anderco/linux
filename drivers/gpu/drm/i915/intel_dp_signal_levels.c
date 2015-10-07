@@ -115,6 +115,59 @@ _dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
 	}
 }
 
+static void
+hsw_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
+{
+	uint32_t signal_levels = ddi_signal_levels(intel_dp);
+
+	DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
+
+	intel_dp->DP &= ~DDI_BUF_EMP_MASK;
+	intel_dp->DP |= signal_levels;
+}
+
+static const struct signal_levels hsw_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = hsw_set_signal_levels,
+};
+
+static const struct signal_levels skl_edp_low_vswing_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = hsw_set_signal_levels,
+};
+
+static void
+bxt_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
+{
+	ddi_signal_levels(intel_dp);
+}
+
+static const struct signal_levels bxt_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = bxt_set_signal_levels,
+};
+
 static void vlv_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
@@ -663,10 +716,18 @@ void
 intel_dp_init_signal_levels(struct intel_dp *intel_dp)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
+	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	enum port port = intel_dig_port->port;
 
-	if (IS_CHERRYVIEW(dev)) {
+	if (IS_BROXTON(dev)) {
+		intel_dp->signal_levels = &bxt_signal_levels;
+	} else if (IS_SKYLAKE(dev) &&
+		   port == PORT_A && dev_priv->edp_low_vswing) {
+		intel_dp->signal_levels = &skl_edp_low_vswing_signal_levels;
+	} else if (HAS_DDI(dev)) {
+		intel_dp->signal_levels = &hsw_signal_levels;
+	} else if (IS_CHERRYVIEW(dev)) {
 		intel_dp->signal_levels = &chv_signal_levels;
 	} else if (IS_VALLEYVIEW(dev) && !IS_CHERRYVIEW(dev)) {
 		intel_dp->signal_levels = &vlv_signal_levels;
