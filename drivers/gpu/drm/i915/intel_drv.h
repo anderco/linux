@@ -742,6 +742,14 @@ struct sink_crc {
 	int last_count;
 };
 
+struct intel_dp;
+struct signal_levels {
+	uint8_t max_voltage;
+	uint8_t max_pre_emph[4];
+
+	void (*set)(struct intel_dp *intel_dp, uint8_t train_set);
+};
+
 struct intel_dp {
 	uint32_t output_reg;
 	uint32_t aux_ch_ctl_reg;
@@ -760,6 +768,7 @@ struct intel_dp {
 	int sink_rates[DP_MAX_SUPPORTED_RATES];
 	struct sink_crc sink_crc;
 	struct drm_dp_aux aux;
+	const struct signal_levels *signal_levels;
 	uint8_t train_set[4];
 	int panel_power_up_delay;
 	int panel_power_down_delay;
@@ -1278,6 +1287,8 @@ void intel_dp_compute_rate(struct intel_dp *intel_dp, int port_clock,
 bool intel_dp_source_supports_hbr2(struct intel_dp *intel_dp);
 bool
 intel_dp_get_link_status(struct intel_dp *intel_dp, uint8_t link_status[DP_LINK_STATUS_SIZE]);
+
+void intel_dp_init_signal_levels(struct intel_dp *intel_dp);
 
 /* intel_dp_mst.c */
 int intel_dp_mst_encoder_init(struct intel_digital_port *intel_dig_port, int conn_id);

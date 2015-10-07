@@ -24,8 +24,8 @@
 #include "intel_drv.h"
 
 /* These are source-specific values. */
-uint8_t
-intel_dp_voltage_max(struct intel_dp *intel_dp)
+static uint8_t
+_dp_voltage_max(struct intel_dp *intel_dp)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -47,8 +47,8 @@ intel_dp_voltage_max(struct intel_dp *intel_dp)
 		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
 }
 
-uint8_t
-intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
+static uint8_t
+_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 	enum port port = dp_to_dig_port(intel_dp)->port;
@@ -389,10 +389,10 @@ static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
 	return 0;
 }
 
-static uint32_t
-gen4_signal_levels(uint8_t train_set)
+static void
+gen4_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
-	uint32_t	signal_levels = 0;
+	uint32_t signal_levels = 0;
 
 	switch (train_set & DP_TRAIN_VOLTAGE_SWING_MASK) {
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
@@ -424,8 +424,37 @@ gen4_signal_levels(uint8_t train_set)
 		signal_levels |= DP_PRE_EMPHASIS_9_5;
 		break;
 	}
-	return signal_levels;
+
+	DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
+
+	intel_dp->DP &= ~(DP_VOLTAGE_MASK | DP_PRE_EMPHASIS_MASK);
+	intel_dp->DP |= signal_levels;
 }
+
+static const struct signal_levels gen4_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = gen4_set_signal_levels,
+};
+
+/* Not for eDP */
+static const struct signal_levels snb_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = gen4_set_signal_levels,
+};
 
 /* Gen6's DP voltage swing and pre-emphasis control */
 static uint32_t
@@ -486,13 +515,12 @@ gen7_edp_signal_levels(uint8_t train_set)
 	}
 }
 
-void
-intel_dp_set_signal_levels(struct intel_dp *intel_dp)
+static void
+_update_signal_levels(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	enum port port = intel_dig_port->port;
 	struct drm_device *dev = intel_dig_port->base.base.dev;
-	struct drm_i915_private *dev_priv = to_i915(dev);
 	uint32_t signal_levels, mask = 0;
 	uint8_t train_set = intel_dp->train_set[0];
 
@@ -514,12 +542,45 @@ intel_dp_set_signal_levels(struct intel_dp *intel_dp)
 		signal_levels = gen6_edp_signal_levels(train_set);
 		mask = EDP_LINK_TRAIN_VOL_EMP_MASK_SNB;
 	} else {
-		signal_levels = gen4_signal_levels(train_set);
-		mask = DP_VOLTAGE_MASK | DP_PRE_EMPHASIS_MASK;
+		WARN(1, "Should be calling intel_dp->signal_levels->set instead.");
+		return;
 	}
 
 	if (mask)
 		DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
+
+	intel_dp->DP = (intel_dp->DP & ~mask) | signal_levels;
+}
+
+uint8_t
+intel_dp_voltage_max(struct intel_dp *intel_dp)
+{
+	if (intel_dp->signal_levels)
+		return intel_dp->signal_levels->max_voltage;
+	else
+		return _dp_voltage_max(intel_dp);
+}
+
+uint8_t
+intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
+{
+	if (intel_dp->signal_levels)
+		return intel_dp->signal_levels->max_pre_emph[voltage_swing];
+	else
+		return _dp_pre_emphasis_max(intel_dp, voltage_swing);
+}
+
+void
+intel_dp_set_signal_levels(struct intel_dp *intel_dp)
+{
+	struct drm_device *dev = intel_dp_to_dev(intel_dp);
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	uint8_t train_set = intel_dp->train_set[0];
+
+	if (intel_dp->signal_levels)
+		intel_dp->signal_levels->set(intel_dp, train_set);
+	else
+		_update_signal_levels(intel_dp);
 
 	DRM_DEBUG_KMS("Using vswing level %d\n",
 		train_set & DP_TRAIN_VOLTAGE_SWING_MASK);
@@ -527,8 +588,20 @@ intel_dp_set_signal_levels(struct intel_dp *intel_dp)
 		(train_set & DP_TRAIN_PRE_EMPHASIS_MASK) >>
 			DP_TRAIN_PRE_EMPHASIS_SHIFT);
 
-	intel_dp->DP = (intel_dp->DP & ~mask) | signal_levels;
-
 	I915_WRITE(intel_dp->output_reg, intel_dp->DP);
 	POSTING_READ(intel_dp->output_reg);
+}
+
+void
+intel_dp_init_signal_levels(struct intel_dp *intel_dp)
+{
+	struct drm_device *dev = intel_dp_to_dev(intel_dp);
+	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
+	enum port port = intel_dig_port->port;
+
+	if (port != PORT_A && (IS_IVYBRIDGE(dev) || IS_GEN6(dev)))
+		intel_dp->signal_levels = &snb_signal_levels;
+
+	if (INTEL_INFO(dev)->gen <= 5)
+		intel_dp->signal_levels = &gen4_signal_levels;
 }
