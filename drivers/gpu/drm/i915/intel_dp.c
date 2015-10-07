@@ -5220,6 +5220,8 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 	if (HAS_DDI(dev))
 		intel_dp->prepare_link_retrain = intel_ddi_prepare_link_retrain;
 
+	intel_dp_init_signal_levels(intel_dp);
+
 	/* Preserve the current hw state. */
 	intel_dp->DP = I915_READ(intel_dp->output_reg);
 	intel_dp->attached_connector = intel_connector;
