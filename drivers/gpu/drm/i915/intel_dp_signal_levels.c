@@ -235,14 +235,13 @@ static bool chv_need_uniq_trans_scale(uint8_t train_set)
 		(train_set & DP_TRAIN_VOLTAGE_SWING_MASK) == DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
 }
 
-static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
+static void chv_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
 	struct intel_crtc *intel_crtc = to_intel_crtc(dport->base.base.crtc);
 	u32 deemph_reg_value, margin_reg_value, val;
-	uint8_t train_set = intel_dp->train_set[0];
 	enum dpio_channel ch = vlv_dport_to_channel(dport);
 	enum pipe pipe = intel_crtc->pipe;
 	int i;
@@ -268,7 +267,8 @@ static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
 			/* FIXME extra to set for 1200 */
 			break;
 		default:
-			return 0;
+			MISSING_CASE(train_set & DP_TRAIN_VOLTAGE_SWING_MASK);
+			return;
 		}
 		break;
 	case DP_TRAIN_PRE_EMPH_LEVEL_1:
@@ -286,7 +286,8 @@ static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
 			margin_reg_value = 154;
 			break;
 		default:
-			return 0;
+			MISSING_CASE(train_set & DP_TRAIN_VOLTAGE_SWING_MASK);
+			return;
 		}
 		break;
 	case DP_TRAIN_PRE_EMPH_LEVEL_2:
@@ -300,7 +301,8 @@ static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
 			margin_reg_value = 154;
 			break;
 		default:
-			return 0;
+			MISSING_CASE(train_set & DP_TRAIN_VOLTAGE_SWING_MASK);
+			return;
 		}
 		break;
 	case DP_TRAIN_PRE_EMPH_LEVEL_3:
@@ -310,11 +312,13 @@ static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
 			margin_reg_value = 154;
 			break;
 		default:
-			return 0;
+			MISSING_CASE(train_set & DP_TRAIN_VOLTAGE_SWING_MASK);
+			return;
 		}
 		break;
 	default:
-		return 0;
+		MISSING_CASE(train_set & DP_TRAIN_PRE_EMPHASIS_MASK);
+		return;
 	}
 
 	mutex_lock(&dev_priv->sb_lock);
@@ -399,9 +403,19 @@ static uint32_t chv_signal_levels(struct intel_dp *intel_dp)
 	}
 
 	mutex_unlock(&dev_priv->sb_lock);
-
-	return 0;
 }
+
+static const struct signal_levels chv_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_3,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = chv_set_signal_levels,
+};
 
 static void
 gen4_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
@@ -594,8 +608,6 @@ _update_signal_levels(struct intel_dp *intel_dp)
 			signal_levels = 0;
 		else
 			mask = DDI_BUF_EMP_MASK;
-	} else if (IS_CHERRYVIEW(dev)) {
-		signal_levels = chv_signal_levels(intel_dp);
 	} else {
 		WARN(1, "Should be calling intel_dp->signal_levels->set instead.");
 		return;
@@ -654,7 +666,9 @@ intel_dp_init_signal_levels(struct intel_dp *intel_dp)
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	enum port port = intel_dig_port->port;
 
-	if (IS_VALLEYVIEW(dev) && !IS_CHERRYVIEW(dev)) {
+	if (IS_CHERRYVIEW(dev)) {
+		intel_dp->signal_levels = &chv_signal_levels;
+	} else if (IS_VALLEYVIEW(dev) && !IS_CHERRYVIEW(dev)) {
 		intel_dp->signal_levels = &vlv_signal_levels;
 	} else if (IS_IVYBRIDGE(dev)) {
 		if (port == PORT_A)
