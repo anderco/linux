@@ -443,7 +443,6 @@ static const struct signal_levels gen4_signal_levels = {
 	.set = gen4_set_signal_levels,
 };
 
-/* Not for eDP */
 static const struct signal_levels snb_signal_levels = {
 	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
 	.max_pre_emph = {
@@ -456,73 +455,123 @@ static const struct signal_levels snb_signal_levels = {
 	.set = gen4_set_signal_levels,
 };
 
-/* Gen6's DP voltage swing and pre-emphasis control */
-static uint32_t
-gen6_edp_signal_levels(uint8_t train_set)
+/* SNB's DP voltage swing and pre-emphasis control */
+static void
+snb_edp_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
-	int signal_levels = train_set & (DP_TRAIN_VOLTAGE_SWING_MASK |
-					 DP_TRAIN_PRE_EMPHASIS_MASK);
-	switch (signal_levels) {
+	uint32_t signal_levels;
+
+	train_set &=
+		(DP_TRAIN_VOLTAGE_SWING_MASK | DP_TRAIN_PRE_EMPHASIS_MASK);
+
+	switch (train_set) {
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_0:
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		return EDP_LINK_TRAIN_400_600MV_0DB_SNB_B;
+		signal_levels =  EDP_LINK_TRAIN_400_600MV_0DB_SNB_B;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		return EDP_LINK_TRAIN_400MV_3_5DB_SNB_B;
+		signal_levels = EDP_LINK_TRAIN_400MV_3_5DB_SNB_B;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_2:
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_2:
-		return EDP_LINK_TRAIN_400_600MV_6DB_SNB_B;
+		signal_levels = EDP_LINK_TRAIN_400_600MV_6DB_SNB_B;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_1:
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		return EDP_LINK_TRAIN_600_800MV_3_5DB_SNB_B;
+		signal_levels = EDP_LINK_TRAIN_600_800MV_3_5DB_SNB_B;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_0:
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_3 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		return EDP_LINK_TRAIN_800_1200MV_0DB_SNB_B;
+		signal_levels = EDP_LINK_TRAIN_800_1200MV_0DB_SNB_B;
+		break;
 	default:
 		DRM_DEBUG_KMS("Unsupported voltage swing/pre-emphasis level:"
-			      "0x%x\n", signal_levels);
-		return EDP_LINK_TRAIN_400_600MV_0DB_SNB_B;
+			      "0x%x\n", train_set);
+		signal_levels = EDP_LINK_TRAIN_400_600MV_0DB_SNB_B;
 	}
+
+	DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
+
+	intel_dp->DP &= ~EDP_LINK_TRAIN_VOL_EMP_MASK_SNB;
+	intel_dp->DP |= signal_levels;
 }
 
-/* Gen7's DP voltage swing and pre-emphasis control */
-static uint32_t
-gen7_edp_signal_levels(uint8_t train_set)
+static const struct signal_levels snb_edp_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = snb_edp_set_signal_levels,
+};
+
+/* IVB's DP voltage swing and pre-emphasis control */
+static void
+ivb_edp_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
-	int signal_levels = train_set & (DP_TRAIN_VOLTAGE_SWING_MASK |
-					 DP_TRAIN_PRE_EMPHASIS_MASK);
-	switch (signal_levels) {
+	uint32_t signal_levels;
+
+	train_set &=
+		(DP_TRAIN_VOLTAGE_SWING_MASK | DP_TRAIN_PRE_EMPHASIS_MASK);
+
+	switch (train_set) {
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		return EDP_LINK_TRAIN_400MV_0DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_400MV_0DB_IVB;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		return EDP_LINK_TRAIN_400MV_3_5DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_400MV_3_5DB_IVB;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_2:
-		return EDP_LINK_TRAIN_400MV_6DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_400MV_6DB_IVB;
+		break;
 
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		return EDP_LINK_TRAIN_600MV_0DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_600MV_0DB_IVB;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		return EDP_LINK_TRAIN_600MV_3_5DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_600MV_3_5DB_IVB;
+		break;
 
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		return EDP_LINK_TRAIN_800MV_0DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_800MV_0DB_IVB;
+		break;
 	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		return EDP_LINK_TRAIN_800MV_3_5DB_IVB;
+		signal_levels = EDP_LINK_TRAIN_800MV_3_5DB_IVB;
+		break;
 
 	default:
 		DRM_DEBUG_KMS("Unsupported voltage swing/pre-emphasis level:"
-			      "0x%x\n", signal_levels);
-		return EDP_LINK_TRAIN_500MV_0DB_IVB;
+			      "0x%x\n", train_set);
+		signal_levels = EDP_LINK_TRAIN_500MV_0DB_IVB;
 	}
+
+	DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
+
+	intel_dp->DP &= ~EDP_LINK_TRAIN_VOL_EMP_MASK_IVB;
+	intel_dp->DP |= signal_levels;
 }
+
+static const struct signal_levels ivb_edp_signal_levels = {
+	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+	.max_pre_emph = {
+		DP_TRAIN_PRE_EMPH_LEVEL_2,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_1,
+		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	},
+
+	.set = ivb_edp_set_signal_levels,
+};
 
 static void
 _update_signal_levels(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
-	enum port port = intel_dig_port->port;
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	uint32_t signal_levels, mask = 0;
-	uint8_t train_set = intel_dp->train_set[0];
 
 	if (HAS_DDI(dev)) {
 		signal_levels = ddi_signal_levels(intel_dp);
@@ -535,12 +584,6 @@ _update_signal_levels(struct intel_dp *intel_dp)
 		signal_levels = chv_signal_levels(intel_dp);
 	} else if (IS_VALLEYVIEW(dev)) {
 		signal_levels = vlv_signal_levels(intel_dp);
-	} else if (IS_GEN7(dev) && port == PORT_A) {
-		signal_levels = gen7_edp_signal_levels(train_set);
-		mask = EDP_LINK_TRAIN_VOL_EMP_MASK_IVB;
-	} else if (IS_GEN6(dev) && port == PORT_A) {
-		signal_levels = gen6_edp_signal_levels(train_set);
-		mask = EDP_LINK_TRAIN_VOL_EMP_MASK_SNB;
 	} else {
 		WARN(1, "Should be calling intel_dp->signal_levels->set instead.");
 		return;
@@ -599,9 +642,16 @@ intel_dp_init_signal_levels(struct intel_dp *intel_dp)
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	enum port port = intel_dig_port->port;
 
-	if (port != PORT_A && (IS_IVYBRIDGE(dev) || IS_GEN6(dev)))
-		intel_dp->signal_levels = &snb_signal_levels;
-
-	if (INTEL_INFO(dev)->gen <= 5)
+	if (IS_IVYBRIDGE(dev)) {
+		if (port == PORT_A)
+			intel_dp->signal_levels = &ivb_edp_signal_levels;
+		else
+			intel_dp->signal_levels = &snb_signal_levels;
+	} else if (IS_GEN6(dev)) {
+		if (port == PORT_A)
+			intel_dp->signal_levels = &snb_edp_signal_levels;
+		else
+			intel_dp->signal_levels = &snb_signal_levels;
+	} else if (INTEL_INFO(dev)->gen <= 5)
 		intel_dp->signal_levels = &gen4_signal_levels;
 }
