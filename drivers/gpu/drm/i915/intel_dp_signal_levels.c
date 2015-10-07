@@ -23,98 +23,6 @@
 
 #include "intel_drv.h"
 
-/* These are source-specific values. */
-static uint8_t
-_dp_voltage_max(struct intel_dp *intel_dp)
-{
-	struct drm_device *dev = intel_dp_to_dev(intel_dp);
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	enum port port = dp_to_dig_port(intel_dp)->port;
-
-	if (IS_BROXTON(dev))
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-	else if (INTEL_INFO(dev)->gen >= 9) {
-		if (dev_priv->edp_low_vswing && port == PORT_A)
-			return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
-	} else if (IS_VALLEYVIEW(dev))
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-	else if (IS_GEN7(dev) && port == PORT_A)
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
-	else if (HAS_PCH_CPT(dev) && port != PORT_A)
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_3;
-	else
-		return DP_TRAIN_VOLTAGE_SWING_LEVEL_2;
-}
-
-static uint8_t
-_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
-{
-	struct drm_device *dev = intel_dp_to_dev(intel_dp);
-	enum port port = dp_to_dig_port(intel_dp)->port;
-
-	if (INTEL_INFO(dev)->gen >= 9) {
-		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
-			return DP_TRAIN_PRE_EMPH_LEVEL_3;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
-			return DP_TRAIN_PRE_EMPH_LEVEL_2;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
-			return DP_TRAIN_PRE_EMPH_LEVEL_1;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_3:
-			return DP_TRAIN_PRE_EMPH_LEVEL_0;
-		default:
-			return DP_TRAIN_PRE_EMPH_LEVEL_0;
-		}
-	} else if (IS_HASWELL(dev) || IS_BROADWELL(dev)) {
-		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
-			return DP_TRAIN_PRE_EMPH_LEVEL_3;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
-			return DP_TRAIN_PRE_EMPH_LEVEL_2;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
-			return DP_TRAIN_PRE_EMPH_LEVEL_1;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_3:
-		default:
-			return DP_TRAIN_PRE_EMPH_LEVEL_0;
-		}
-	} else if (IS_VALLEYVIEW(dev)) {
-		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
-			return DP_TRAIN_PRE_EMPH_LEVEL_3;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
-			return DP_TRAIN_PRE_EMPH_LEVEL_2;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
-			return DP_TRAIN_PRE_EMPH_LEVEL_1;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_3:
-		default:
-			return DP_TRAIN_PRE_EMPH_LEVEL_0;
-		}
-	} else if (IS_GEN7(dev) && port == PORT_A) {
-		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
-			return DP_TRAIN_PRE_EMPH_LEVEL_2;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
-			return DP_TRAIN_PRE_EMPH_LEVEL_1;
-		default:
-			return DP_TRAIN_PRE_EMPH_LEVEL_0;
-		}
-	} else {
-		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
-			return DP_TRAIN_PRE_EMPH_LEVEL_2;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
-			return DP_TRAIN_PRE_EMPH_LEVEL_2;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
-			return DP_TRAIN_PRE_EMPH_LEVEL_1;
-		case DP_TRAIN_VOLTAGE_SWING_LEVEL_3:
-		default:
-			return DP_TRAIN_PRE_EMPH_LEVEL_0;
-		}
-	}
-}
-
 static void
 hsw_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
@@ -647,47 +555,16 @@ static const struct signal_levels ivb_edp_signal_levels = {
 	.set = ivb_edp_set_signal_levels,
 };
 
-static void
-_update_signal_levels(struct intel_dp *intel_dp)
-{
-	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
-	struct drm_device *dev = intel_dig_port->base.base.dev;
-	uint32_t signal_levels, mask = 0;
-
-	if (HAS_DDI(dev)) {
-		signal_levels = ddi_signal_levels(intel_dp);
-
-		if (IS_BROXTON(dev))
-			signal_levels = 0;
-		else
-			mask = DDI_BUF_EMP_MASK;
-	} else {
-		WARN(1, "Should be calling intel_dp->signal_levels->set instead.");
-		return;
-	}
-
-	if (mask)
-		DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
-
-	intel_dp->DP = (intel_dp->DP & ~mask) | signal_levels;
-}
-
 uint8_t
 intel_dp_voltage_max(struct intel_dp *intel_dp)
 {
-	if (intel_dp->signal_levels)
-		return intel_dp->signal_levels->max_voltage;
-	else
-		return _dp_voltage_max(intel_dp);
+	return intel_dp->signal_levels->max_voltage;
 }
 
 uint8_t
 intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
 {
-	if (intel_dp->signal_levels)
-		return intel_dp->signal_levels->max_pre_emph[voltage_swing];
-	else
-		return _dp_pre_emphasis_max(intel_dp, voltage_swing);
+	return intel_dp->signal_levels->max_pre_emph[voltage_swing];
 }
 
 void
@@ -697,10 +574,7 @@ intel_dp_set_signal_levels(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	uint8_t train_set = intel_dp->train_set[0];
 
-	if (intel_dp->signal_levels)
-		intel_dp->signal_levels->set(intel_dp, train_set);
-	else
-		_update_signal_levels(intel_dp);
+	intel_dp->signal_levels->set(intel_dp, train_set);
 
 	DRM_DEBUG_KMS("Using vswing level %d\n",
 		train_set & DP_TRAIN_VOLTAGE_SWING_MASK);
