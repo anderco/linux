@@ -301,9 +301,6 @@ static const struct bxt_ddi_buf_trans bxt_ddi_translations_hdmi[] = {
 	{ 154, 0x9A, 1, 128, true },	/* 9:	1200		0   */
 };
 
-static void bxt_ddi_vswing_sequence(struct drm_device *dev, u32 level,
-				    enum port port, int type);
-
 static void ddi_get_encoder_port(struct intel_encoder *intel_encoder,
 				 struct intel_digital_port **dig_port,
 				 enum port *port)
@@ -2066,8 +2063,8 @@ void intel_ddi_disable_pipe_clock(struct intel_crtc *intel_crtc)
 			   TRANS_CLK_SEL_DISABLED);
 }
 
-static void skl_ddi_set_iboost(struct drm_device *dev, u32 level,
-			       enum port port, int type)
+void skl_ddi_set_iboost(struct drm_device *dev, u32 level,
+			enum port port, int type)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	const struct ddi_buf_trans *ddi_translations;
@@ -2123,8 +2120,8 @@ static void skl_ddi_set_iboost(struct drm_device *dev, u32 level,
 	I915_WRITE(DISPIO_CR_TX_BMU_CR0, reg);
 }
 
-static void bxt_ddi_vswing_sequence(struct drm_device *dev, u32 level,
-				    enum port port, int type)
+void bxt_ddi_vswing_sequence(struct drm_device *dev, u32 level,
+			     enum port port, int type)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	const struct bxt_ddi_buf_trans *ddi_translations;
@@ -2190,73 +2187,6 @@ static void bxt_ddi_vswing_sequence(struct drm_device *dev, u32 level,
 	val = I915_READ(BXT_PORT_PCS_DW10_LN01(port));
 	val |= TX2_SWING_CALC_INIT | TX1_SWING_CALC_INIT;
 	I915_WRITE(BXT_PORT_PCS_DW10_GRP(port), val);
-}
-
-static uint32_t translate_signal_level(int signal_levels)
-{
-	uint32_t level;
-
-	switch (signal_levels) {
-	default:
-		DRM_DEBUG_KMS("Unsupported voltage swing/pre-emphasis level: 0x%x\n",
-			      signal_levels);
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		level = 0;
-		break;
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		level = 1;
-		break;
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_2:
-		level = 2;
-		break;
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_3:
-		level = 3;
-		break;
-
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		level = 4;
-		break;
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		level = 5;
-		break;
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_2:
-		level = 6;
-		break;
-
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		level = 7;
-		break;
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_1:
-		level = 8;
-		break;
-
-	case DP_TRAIN_VOLTAGE_SWING_LEVEL_3 | DP_TRAIN_PRE_EMPH_LEVEL_0:
-		level = 9;
-		break;
-	}
-
-	return level;
-}
-
-uint32_t ddi_signal_levels(struct intel_dp *intel_dp)
-{
-	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
-	struct drm_device *dev = dport->base.base.dev;
-	struct intel_encoder *encoder = &dport->base;
-	uint8_t train_set = intel_dp->train_set[0];
-	int signal_levels = train_set & (DP_TRAIN_VOLTAGE_SWING_MASK |
-					 DP_TRAIN_PRE_EMPHASIS_MASK);
-	enum port port = dport->port;
-	uint32_t level;
-
-	level = translate_signal_level(signal_levels);
-
-	if (IS_SKYLAKE(dev))
-		skl_ddi_set_iboost(dev, level, port, encoder->type);
-	else if (IS_BROXTON(dev))
-		bxt_ddi_vswing_sequence(dev, level, port, encoder->type);
-
-	return DDI_BUF_TRANS_SELECT(level);
 }
 
 static void intel_ddi_pre_enable(struct intel_encoder *intel_encoder)
