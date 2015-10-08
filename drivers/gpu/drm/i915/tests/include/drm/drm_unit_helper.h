@@ -91,6 +91,7 @@ static inline const char *dev_name(const struct device *dev)
 }
 
 struct drm_device {
+	void *dev_private;
 };
 
 struct drm_connector {
