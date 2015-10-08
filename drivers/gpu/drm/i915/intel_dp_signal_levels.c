@@ -23,10 +23,72 @@
 
 #include "intel_drv.h"
 
+static uint32_t ddi_translate_signal_level(uint8_t train_set)
+{
+	uint32_t level;
+
+	train_set &=
+		(DP_TRAIN_VOLTAGE_SWING_MASK | DP_TRAIN_PRE_EMPHASIS_MASK);
+
+	switch (train_set) {
+	default:
+		DRM_DEBUG_KMS("Unsupported voltage swing/pre-emphasis level: 0x%x\n",
+			      train_set);
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_0:
+		level = 0;
+		break;
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_1:
+		level = 1;
+		break;
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_2:
+		level = 2;
+		break;
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_3:
+		level = 3;
+		break;
+
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_0:
+		level = 4;
+		break;
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_1:
+		level = 5;
+		break;
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_1 | DP_TRAIN_PRE_EMPH_LEVEL_2:
+		level = 6;
+		break;
+
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_0:
+		level = 7;
+		break;
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_2 | DP_TRAIN_PRE_EMPH_LEVEL_1:
+		level = 8;
+		break;
+
+	case DP_TRAIN_VOLTAGE_SWING_LEVEL_3 | DP_TRAIN_PRE_EMPH_LEVEL_0:
+		level = 9;
+		break;
+	}
+
+	return level;
+}
+
 static void
 hsw_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
-	uint32_t signal_levels = ddi_signal_levels(intel_dp);
+	struct drm_device *dev = intel_dp_to_dev(intel_dp);
+	uint32_t ddi_level, signal_levels;
+
+	ddi_level = ddi_translate_signal_level(train_set);
+
+	if (IS_SKYLAKE(dev)) {
+		struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
+		struct intel_encoder *encoder = &dport->base;
+		enum port port = dport->port;
+
+		skl_ddi_set_iboost(dev, ddi_level, port, encoder->type);
+	}
+
+	signal_levels = DDI_BUF_TRANS_SELECT(ddi_level);
 
 	DRM_DEBUG_KMS("Using signal levels %08x\n", signal_levels);
 
@@ -61,7 +123,14 @@ static const struct signal_levels skl_edp_low_vswing_signal_levels = {
 static void
 bxt_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 {
-	ddi_signal_levels(intel_dp);
+	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
+	struct drm_device *dev = dport->base.base.dev;
+	struct intel_encoder *encoder = &dport->base;
+	enum port port = dport->port;
+	uint32_t level;
+
+	level = ddi_translate_signal_level(train_set);
+	bxt_ddi_vswing_sequence(dev, level, port, encoder->type);
 }
 
 static const struct signal_levels bxt_signal_levels = {
