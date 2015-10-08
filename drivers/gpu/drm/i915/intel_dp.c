@@ -3085,7 +3085,20 @@ intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 	enum port port = dp_to_dig_port(intel_dp)->port;
 
-	if (INTEL_INFO(dev)->gen >= 7 && !IS_IVYBRIDGE(dev)) {
+	if (INTEL_INFO(dev)->gen >= 9) {
+		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
+			return DP_TRAIN_PRE_EMPH_LEVEL_3;
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
+			return DP_TRAIN_PRE_EMPH_LEVEL_2;
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
+			return DP_TRAIN_PRE_EMPH_LEVEL_1;
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_3:
+			return DP_TRAIN_PRE_EMPH_LEVEL_0;
+		default:
+			return DP_TRAIN_PRE_EMPH_LEVEL_0;
+		}
+	} else if (IS_HASWELL(dev) || IS_BROADWELL(dev)) {
 		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
 		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
 			return DP_TRAIN_PRE_EMPH_LEVEL_3;
@@ -3097,7 +3110,19 @@ intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
 		default:
 			return DP_TRAIN_PRE_EMPH_LEVEL_0;
 		}
-	} else if (IS_IVYBRIDGE(dev) && port == PORT_A) {
+	} else if (IS_VALLEYVIEW(dev)) {
+		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
+			return DP_TRAIN_PRE_EMPH_LEVEL_3;
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_1:
+			return DP_TRAIN_PRE_EMPH_LEVEL_2;
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_2:
+			return DP_TRAIN_PRE_EMPH_LEVEL_1;
+		case DP_TRAIN_VOLTAGE_SWING_LEVEL_3:
+		default:
+			return DP_TRAIN_PRE_EMPH_LEVEL_0;
+		}
+	} else if (IS_GEN7(dev) && port == PORT_A) {
 		switch (voltage_swing & DP_TRAIN_VOLTAGE_SWING_MASK) {
 		case DP_TRAIN_VOLTAGE_SWING_LEVEL_0:
 			return DP_TRAIN_PRE_EMPH_LEVEL_2;
