@@ -39,6 +39,8 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 
+#include "intel_trace.h"
+
 static bool
 format_is_yuv(uint32_t format)
 {
