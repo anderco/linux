@@ -21,8 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "i915_reg.h"
-#include "intel_dp.h"
+#include "intel_drv.h"
 
 static uint32_t ddi_translate_signal_level(uint8_t train_set)
 {
