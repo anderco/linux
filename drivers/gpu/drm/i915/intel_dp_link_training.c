@@ -257,18 +257,17 @@ static void
 intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 {
 	bool channel_eq = false;
-	int tries, cr_tries;
+	int tries;
 
 	if (!setup_channel_equalization(intel_dp))
 		return;
 
 	tries = 0;
-	cr_tries = 0;
 	channel_eq = false;
 	for (;;) {
 		uint8_t link_status[DP_LINK_STATUS_SIZE];
 
-		if (cr_tries > 5) {
+		if (tries >= 5) {
 			DRM_ERROR("failed to train DP, aborting\n");
 			break;
 		}
@@ -285,7 +284,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 			intel_dp->train_set_valid = false;
 			intel_dp_link_training_clock_recovery(intel_dp);
 			setup_channel_equalization(intel_dp);
-			cr_tries++;
+			++tries;
 			continue;
 		}
 
@@ -293,16 +292,6 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 					 intel_dp->lane_count)) {
 			channel_eq = true;
 			break;
-		}
-
-		/* Try 5 times, then try clock recovery if that fails */
-		if (tries > 5) {
-			intel_dp->train_set_valid = false;
-			intel_dp_link_training_clock_recovery(intel_dp);
-			setup_channel_equalization(intel_dp);
-			tries = 0;
-			cr_tries++;
-			continue;
 		}
 
 		/* Update training set as requested by target */
