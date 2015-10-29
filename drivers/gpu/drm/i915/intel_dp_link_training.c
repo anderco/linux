@@ -143,6 +143,13 @@ setup_clock_recovery(struct intel_dp *intel_dp)
 
 	intel_dp->DP |= DP_PORT_EN;
 
+	if (!intel_dp_reset_link_train(intel_dp,
+				       DP_TRAINING_PATTERN_1 |
+				       DP_LINK_SCRAMBLING_DISABLE)) {
+		DRM_ERROR("failed to enable link training\n");
+		return false;
+	}
+
 	return true;
 }
 
@@ -158,10 +165,14 @@ max_voltage_reached_on_all_lanes(struct intel_dp *intel_dp)
 	return true;
 }
 
+/* Enable corresponding port and start training pattern 1 */
 static bool
-clock_recovery_voltage_step(struct intel_dp *intel_dp)
+intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 {
 	int voltage_tries = 0;
+
+	if (!setup_clock_recovery(intel_dp))
+		return false;
 
 	for (;;) {
 		uint8_t link_status[DP_LINK_STATUS_SIZE];
@@ -172,8 +183,10 @@ clock_recovery_voltage_step(struct intel_dp *intel_dp)
 			break;
 		}
 
-		if (drm_dp_clock_recovery_ok(link_status, intel_dp->lane_count))
+		if (drm_dp_clock_recovery_ok(link_status, intel_dp->lane_count)) {
+			DRM_DEBUG_KMS("clock recovery OK\n");
 			return true;
+		}
 
 		/*
 		 * if we used previously trained voltage and pre-emphasis values
@@ -205,34 +218,6 @@ clock_recovery_voltage_step(struct intel_dp *intel_dp)
 			break;
 		}
 	}
-
-	return false;
-}
-
-/* Enable corresponding port and start training pattern 1 */
-static bool
-intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
-{
-	int loop_tries;
-
-	if (!setup_clock_recovery(intel_dp))
-		return false;
-
-	for (loop_tries = 0; loop_tries < 5; loop_tries++) {
-		if (!intel_dp_reset_link_train(intel_dp,
-					       DP_TRAINING_PATTERN_1 |
-					       DP_LINK_SCRAMBLING_DISABLE)) {
-			DRM_ERROR("failed to enable link training\n");
-			return false;
-		}
-
-		if (clock_recovery_voltage_step(intel_dp)) {
-			DRM_DEBUG_KMS("clock recovery OK\n");
-			return true;
-		}
-	}
-
-	DRM_ERROR("too many full retries, give up\n");
 
 	return false;
 }
