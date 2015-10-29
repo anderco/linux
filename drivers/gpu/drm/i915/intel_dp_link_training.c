@@ -281,11 +281,8 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp)
 		/* Make sure clock is still ok */
 		if (!drm_dp_clock_recovery_ok(link_status,
 					      intel_dp->lane_count)) {
-			intel_dp->train_set_valid = false;
-			intel_dp_link_training_clock_recovery(intel_dp);
-			setup_channel_equalization(intel_dp);
-			++tries;
-			continue;
+			DRM_ERROR("Clock recovery lost during channel EQ\n");
+			break;
 		}
 
 		if (drm_dp_channel_eq_ok(link_status,
