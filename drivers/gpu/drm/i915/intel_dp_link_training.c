@@ -46,13 +46,13 @@ intel_get_adjust_train(struct intel_dp *intel_dp,
 			p = this_p;
 	}
 
-	voltage_max = intel_dp_voltage_max(intel_dp);
-	if (v >= voltage_max)
-		v = voltage_max | DP_TRAIN_MAX_SWING_REACHED;
-
-	preemph_max = intel_dp_pre_emphasis_max(intel_dp, v);
+	preemph_max = intel_dp_pre_emphasis_max(intel_dp);
 	if (p >= preemph_max)
 		p = preemph_max | DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
+
+	voltage_max = intel_dp_voltage_max(intel_dp, p);
+	if (v >= voltage_max)
+		v = voltage_max | DP_TRAIN_MAX_SWING_REACHED;
 
 	mask = DP_TRAIN_VOLTAGE_SWING_MASK | DP_TRAIN_MAX_SWING_REACHED;
 

@@ -744,8 +744,8 @@ struct sink_crc {
 
 struct intel_dp;
 struct signal_levels {
-	uint8_t max_voltage;
-	uint8_t max_pre_emph[4];
+	uint8_t max_pre_emph;
+	uint8_t max_voltage[4];
 
 	void (*set)(struct intel_dp *intel_dp, uint8_t train_set);
 };
@@ -1283,9 +1283,9 @@ void
 intel_dp_set_signal_levels(struct intel_dp *intel_dp);
 void intel_dp_set_idle_link_train(struct intel_dp *intel_dp);
 uint8_t
-intel_dp_voltage_max(struct intel_dp *intel_dp);
+intel_dp_voltage_max(struct intel_dp *intel_dp, uint8_t max_pre_emph);
 uint8_t
-intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing);
+intel_dp_pre_emphasis_max(struct intel_dp *intel_dp);
 void intel_dp_compute_rate(struct intel_dp *intel_dp, int port_clock,
 			   uint8_t *link_bw, uint8_t *rate_select);
 bool intel_dp_source_supports_hbr2(struct intel_dp *intel_dp);

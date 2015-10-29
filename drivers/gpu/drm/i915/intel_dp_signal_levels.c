@@ -97,24 +97,24 @@ hsw_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels hsw_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_3,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = hsw_set_signal_levels,
 };
 
 static const struct signal_levels skl_edp_low_vswing_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_3,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = hsw_set_signal_levels,
@@ -134,12 +134,12 @@ bxt_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels bxt_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_3,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = bxt_set_signal_levels,
@@ -248,12 +248,12 @@ static void vlv_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels vlv_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_3,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = vlv_set_signal_levels,
@@ -436,12 +436,12 @@ static void chv_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels chv_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_3,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_3,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = chv_set_signal_levels,
@@ -490,24 +490,24 @@ gen4_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels gen4_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_2,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = gen4_set_signal_levels,
 };
 
 static const struct signal_levels snb_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_2,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_3,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = gen4_set_signal_levels,
@@ -555,12 +555,12 @@ snb_edp_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels snb_edp_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_2,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_1,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = snb_edp_set_signal_levels,
@@ -613,27 +613,29 @@ ivb_edp_set_signal_levels(struct intel_dp *intel_dp, uint8_t train_set)
 }
 
 static const struct signal_levels ivb_edp_signal_levels = {
-	.max_voltage = DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
-	.max_pre_emph = {
-		DP_TRAIN_PRE_EMPH_LEVEL_2,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_1,
-		DP_TRAIN_PRE_EMPH_LEVEL_0,
+	.max_pre_emph = DP_TRAIN_PRE_EMPH_LEVEL_2,
+	.max_voltage = {
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_2,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
+		DP_TRAIN_VOLTAGE_SWING_LEVEL_0,
 	},
 
 	.set = ivb_edp_set_signal_levels,
 };
 
 uint8_t
-intel_dp_voltage_max(struct intel_dp *intel_dp)
+intel_dp_voltage_max(struct intel_dp *intel_dp, uint8_t pre_emph)
 {
-	return intel_dp->signal_levels->max_voltage;
+	int i = (pre_emph & DP_TRAIN_PRE_EMPHASIS_MASK) >>
+		DP_TRAIN_PRE_EMPHASIS_SHIFT;
+	return intel_dp->signal_levels->max_voltage[i];
 }
 
 uint8_t
-intel_dp_pre_emphasis_max(struct intel_dp *intel_dp, uint8_t voltage_swing)
+intel_dp_pre_emphasis_max(struct intel_dp *intel_dp)
 {
-	return intel_dp->signal_levels->max_pre_emph[voltage_swing];
+	return intel_dp->signal_levels->max_pre_emph;
 }
 
 void
