@@ -210,29 +210,31 @@ clock_recovery_voltage_step(struct intel_dp *intel_dp)
 }
 
 /* Enable corresponding port and start training pattern 1 */
-static void
+static bool
 intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp)
 {
 	int loop_tries;
 
 	if (!setup_clock_recovery(intel_dp))
-		return;
+		return false;
 
 	for (loop_tries = 0; loop_tries < 5; loop_tries++) {
 		if (!intel_dp_reset_link_train(intel_dp,
 					       DP_TRAINING_PATTERN_1 |
 					       DP_LINK_SCRAMBLING_DISABLE)) {
 			DRM_ERROR("failed to enable link training\n");
-			return;
+			return false;
 		}
 
 		if (clock_recovery_voltage_step(intel_dp)) {
 			DRM_DEBUG_KMS("clock recovery OK\n");
-			return;
+			return true;
 		}
 	}
 
 	DRM_ERROR("too many full retries, give up\n");
+
+	return false;
 }
 
 static bool
@@ -344,6 +346,6 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp)
 void
 intel_dp_start_link_train(struct intel_dp *intel_dp)
 {
-	intel_dp_link_training_clock_recovery(intel_dp);
-	intel_dp_link_training_channel_equalization(intel_dp);
+	if (intel_dp_link_training_clock_recovery(intel_dp))
+		intel_dp_link_training_channel_equalization(intel_dp);
 }
