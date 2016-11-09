@@ -995,13 +995,13 @@ static int gen9_init_indirectctx_bb(struct intel_engine_cs *engine,
 	if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_A1))
 		wa_ctx_emit(batch, index, MI_ARB_ON_OFF | MI_ARB_DISABLE);
 
-	/* WaFlushCoherentL3CacheLinesAtContextSwitch:skl,bxt */
+	/* WaFlushCoherentL3CacheLinesAtContextSwitch:skl,bxt,glk */
 	ret = gen8_emit_flush_coherentl3_wa(engine, batch, index);
 	if (ret < 0)
 		return ret;
 	index = ret;
 
-	/* WaDisableGatherAtSetShaderCommonSlice:skl,bxt,kbl */
+	/* WaDisableGatherAtSetShaderCommonSlice:skl,bxt,kbl,glk */
 	wa_ctx_emit(batch, index, MI_LOAD_REGISTER_IMM(1));
 	wa_ctx_emit_reg(batch, index, COMMON_SLICE_CHICKEN2);
 	wa_ctx_emit(batch, index, _MASKED_BIT_DISABLE(
@@ -1025,7 +1025,7 @@ static int gen9_init_indirectctx_bb(struct intel_engine_cs *engine,
 		wa_ctx_emit(batch, index, 0);
 	}
 
-	/* WaMediaPoolStateCmdInWABB:bxt */
+	/* WaMediaPoolStateCmdInWABB:bxt,glk */
 	if (HAS_POOLED_EU(engine->i915)) {
 		/*
 		 * EU pool configuration is setup along with golden context
