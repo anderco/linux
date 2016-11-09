@@ -89,11 +89,13 @@ static void bxt_init_clock_gating(struct drm_i915_private *dev_priv)
 		   GEN8_SDEUNIT_CLOCK_GATE_DISABLE);
 
 	/*
+	 * WaSetHdcUnitClockGatingDisableInUcgctl6:bxt
 	 * FIXME:
 	 * GEN8_HDCUNIT_CLOCK_GATE_DISABLE_HDCREQ applies on 3x6 GT SKUs only.
 	 */
-	I915_WRITE(GEN8_UCGCTL6, I915_READ(GEN8_UCGCTL6) |
-		   GEN8_HDCUNIT_CLOCK_GATE_DISABLE_HDCREQ);
+	if (IS_BXT_REVID(dev_priv, 0, BXT_REVID_B0))
+		I915_WRITE(GEN8_UCGCTL6, I915_READ(GEN8_UCGCTL6) |
+			   GEN8_HDCUNIT_CLOCK_GATE_DISABLE_HDCREQ);
 
 	/*
 	 * WaDisablePWMClockGating:bxt
