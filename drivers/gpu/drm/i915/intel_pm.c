@@ -96,7 +96,8 @@ static void bxt_init_clock_gating(struct drm_i915_private *dev_priv)
 		   GEN8_HDCUNIT_CLOCK_GATE_DISABLE_HDCREQ);
 
 	/*
-	 * Wa: Backlight PWM may stop in the asserted state, causing backlight
+	 * WaDisablePWMClockGating:bxt
+	 * Backlight PWM may stop in the asserted state, causing backlight
 	 * to stay fully on.
 	 */
 	if (IS_BXT_REVID(dev_priv, BXT_REVID_B0, REVID_FOREVER))
