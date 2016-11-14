@@ -1492,6 +1492,14 @@ static void bxt_ddi_pll_disable(struct drm_i915_private *dev_priv,
 	enum port port = (enum port)pll->id;	/* 1:1 port->PLL mapping */
 	uint32_t temp;
 
+	/* WaDDIIOTimeout:glk */
+	if (IS_GLK_REVID(dev_priv, 0, GLK_REVID_A1)) {
+		temp = I915_READ(CHICKEN_MISC_2);
+		temp &= ~(GLK_CL0_PWR_DOWN | GLK_CL1_PWR_DOWN |
+			 GLK_CL2_PWR_DOWN);
+		I915_WRITE(CHICKEN_MISC_2, temp);
+	}
+
 	temp = I915_READ(BXT_PORT_PLL_ENABLE(port));
 	temp &= ~PORT_PLL_ENABLE;
 	I915_WRITE(BXT_PORT_PLL_ENABLE(port), temp);

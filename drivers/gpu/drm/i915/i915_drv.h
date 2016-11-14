@@ -2507,6 +2507,12 @@ struct drm_i915_cmd_table {
 #define IS_KBL_REVID(dev_priv, since, until) \
 	(IS_KABYLAKE(dev_priv) && IS_REVID(dev_priv, since, until))
 
+#define GLK_REVID_A0		0x0
+#define GLK_REVID_A1		0x1
+
+#define IS_GLK_REVID(dev_priv, since, until) \
+	(IS_GEMINILAKE(dev_priv) && IS_REVID(dev_priv, since, until))
+
 /*
  * The genX designation typically refers to the render engine, so render
  * capability related checks should use IS_GEN, while display and other checks
