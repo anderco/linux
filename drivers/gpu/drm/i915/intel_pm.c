@@ -3861,7 +3861,10 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 			selected_result = method2;
 		else if ((ddb_allocation /
 			fixed_16_16_to_u32_round_up(plane_blocks_per_line)) >= 1)
-			selected_result = min_fixed_16_16(method1, method2);
+			if (IS_GEMINILAKE(dev_priv))
+				selected_result = method2;
+			else
+				selected_result = min_fixed_16_16(method1, method2);
 		else
 			selected_result = method1;
 	}
@@ -3870,7 +3873,7 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 	res_lines = DIV_ROUND_UP(selected_result.val,
 				 plane_blocks_per_line.val);
 
-	if (level >= 1 && level <= 7) {
+	if(!IS_GEMINILAKE(dev_priv) && level >= 1 && level <= 7) {
 		if (y_tiled) {
 			res_blocks += fixed_16_16_to_u32_round_up(y_tile_minimum);
 			res_lines += y_min_scanlines;
