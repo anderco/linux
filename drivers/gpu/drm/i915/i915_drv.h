@@ -1834,6 +1834,8 @@ struct skl_wm_level {
 	bool plane_en;
 	uint16_t plane_res_b;
 	uint8_t plane_res_l;
+	bool y_tiled;
+	uint_fixed_16_16_t y_tile_minimum;
 };
 
 /*

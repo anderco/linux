@@ -3851,6 +3851,9 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 	y_tile_minimum = mul_u32_fixed_16_16(y_min_scanlines,
 					     plane_blocks_per_line);
 
+	out_wm->y_tiled = y_tiled;
+	out_wm->y_tile_minimum = y_tile_minimum;
+
 	if (y_tiled) {
 		selected_result = max_fixed_16_16(method2, y_tile_minimum);
 	} else {
@@ -3984,14 +3987,53 @@ skl_compute_linetime_wm(struct intel_crtc_state *cstate)
 	return linetime_wm;
 }
 
-static void skl_compute_transition_wm(struct intel_crtc_state *cstate,
+static void skl_compute_transition_wm(const struct drm_i915_private *dev_priv,
+				      const struct skl_ddb_allocation *ddb,
+				      const struct intel_crtc_state *cstate,
+				      const struct intel_plane *intel_plane,
+				      const struct skl_wm_level *level0,
 				      struct skl_wm_level *trans_wm /* out */)
 {
+	enum pipe pipe = to_intel_crtc(cstate->base.crtc)->pipe;
+	int transition_min;
+	int transition_amount = 0;
+	int transition_offset_blocks;
+	int res_blocks;
+	u16 ddb_blocks;
+	uint_fixed_16_16_t y_tile_minimum;
+
 	if (!cstate->base.active)
 		return;
 
-	/* Until we know more, just disable transition WMs */
-	trans_wm->plane_en = false;
+	if (IS_GEMINILAKE(dev_priv)) {
+		transition_min = 4;
+	} else {
+		/* Display WA #1107: bxt,skl,kbl */
+		trans_wm->plane_en = false;
+		return;
+	}
+
+	transition_offset_blocks = transition_min + transition_amount;
+
+	y_tile_minimum = mul_u32_fixed_16_16(2, level0->y_tile_minimum);
+
+	if (level0->y_tiled) {
+		res_blocks = max((u32) level0->plane_res_b,
+				 fixed_16_16_to_u32_round_up(y_tile_minimum));
+	} else {
+		res_blocks = level0->plane_res_b;
+	}
+
+	res_blocks += transition_offset_blocks + 1;
+
+	ddb_blocks = skl_ddb_entry_size(&ddb->plane[pipe][intel_plane->id]);
+	if (res_blocks >= ddb_blocks) {
+		DRM_DEBUG_KMS("Transition watermarks exceeds ddb allocation\n");
+		trans_wm->plane_en = false;
+	}
+
+	trans_wm->plane_en = true;
+	trans_wm->plane_res_b = res_blocks;
 }
 
 static int skl_build_pipe_wm(struct intel_crtc_state *cstate,
@@ -4023,7 +4065,9 @@ static int skl_build_pipe_wm(struct intel_crtc_state *cstate,
 			if (ret)
 				return ret;
 		}
-		skl_compute_transition_wm(cstate, &wm->trans_wm);
+		skl_compute_transition_wm(dev_priv, ddb, cstate,
+					  intel_plane, &wm->wm[0],
+					  &wm->trans_wm);
 	}
 	pipe_wm->linetime = skl_compute_linetime_wm(cstate);
 
