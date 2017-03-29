@@ -3749,9 +3749,7 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 				struct intel_plane_state *intel_pstate,
 				uint16_t ddb_allocation,
 				int level,
-				uint16_t *out_blocks, /* out */
-				uint8_t *out_lines, /* out */
-				bool *enabled /* out */)
+				struct skl_wm_level *out_wm /* out */)
 {
 	struct intel_plane *plane = to_intel_plane(intel_pstate->base.plane);
 	struct drm_plane_state *pstate = &intel_pstate->base;
@@ -3775,7 +3773,7 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 
 	if (latency == 0 ||
 	    !intel_wm_plane_visible(cstate, intel_pstate)) {
-		*enabled = false;
+		out_wm->plane_en = false;
 		return 0;
 	}
 
@@ -3883,7 +3881,7 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 	}
 
 	if (res_blocks >= ddb_allocation || res_lines > 31) {
-		*enabled = false;
+		out_wm->plane_en = false;
 
 		/*
 		 * If there are no valid level 0 watermarks, then we can't
@@ -3902,9 +3900,9 @@ static int skl_compute_plane_wm(const struct drm_i915_private *dev_priv,
 		}
 	}
 
-	*out_blocks = res_blocks;
-	*out_lines = res_lines;
-	*enabled = true;
+	out_wm->plane_res_b = res_blocks;
+	out_wm->plane_res_l = res_lines;
+	out_wm->plane_en = true;
 
 	return 0;
 }
@@ -3953,9 +3951,7 @@ skl_compute_wm_level(const struct drm_i915_private *dev_priv,
 				   intel_pstate,
 				   ddb_blocks,
 				   level,
-				   &result->plane_res_b,
-				   &result->plane_res_l,
-				   &result->plane_en);
+				   result);
 	if (ret)
 		return ret;
 
