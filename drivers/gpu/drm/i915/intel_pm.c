@@ -3979,7 +3979,7 @@ skl_compute_linetime_wm(struct intel_crtc_state *cstate)
 				   1000, pixel_rate);
 
 	/* Display WA #1135: bxt. */
-	if (IS_BROXTON(dev_priv) && dev_priv->ipc_enabled)
+	if (IS_GEN9_LP(dev_priv) && dev_priv->ipc_enabled)
 		linetime_wm = DIV_ROUND_UP(linetime_wm, 2);
 
 	return linetime_wm;
